@@ -1,0 +1,78 @@
+package fixer
+
+import "testing"
+
+func TestStairCorners(t *testing.T) {
+	f, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, orientation := range []struct {
+		facing, left, right string
+		dx, dz              int
+	}{
+		{facing: "north", left: "west", right: "east", dx: 0, dz: -1},
+		{facing: "east", left: "north", right: "south", dx: 1, dz: 0},
+		{facing: "south", left: "east", right: "west", dx: 0, dz: 1},
+		{facing: "west", left: "south", right: "north", dx: -1, dz: 0},
+	} {
+		for _, half := range []string{"bottom", "top"} {
+			for _, corner := range []struct {
+				shape, otherFacing string
+				distance           int
+			}{
+				{shape: "outer_left", otherFacing: orientation.left, distance: 1},
+				{shape: "outer_right", otherFacing: orientation.right, distance: 1},
+				{shape: "inner_left", otherFacing: orientation.left, distance: -1},
+				{shape: "inner_right", otherFacing: orientation.right, distance: -1},
+			} {
+				t.Run(orientation.facing+"/"+half+"/"+corner.shape, func(t *testing.T) {
+					chunk := airChunk(t)
+					states := map[string]string{
+						"facing": orientation.facing, "half": half, "shape": "straight",
+					}
+					chunk[cell(8, 8, 8)] = stateHash(t, "oak_stairs", states)
+					chunk[cell(8+corner.distance*orientation.dx, 8, 8+corner.distance*orientation.dz)] = stateHash(t, "stone_stairs", map[string]string{
+						"facing": corner.otherFacing, "half": half,
+					})
+					states["shape"] = corner.shape
+					got := f.Fix(chunk, Neighbours{})
+					assertHash(t, got[cell(8, 8, 8)], stateHash(t, "oak_stairs", states))
+					if len(f.stairShapes(got, Neighbours{})) != 0 {
+						t.Fatal("unchanged stairs were reported as changes")
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestStairShapeSelection(t *testing.T) {
+	f, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name, frontFacing, frontHalf, backFacing, backHalf, want string
+	}{
+		{name: "isolated", want: "straight"},
+		{name: "different halves", frontFacing: "west", frontHalf: "top", backFacing: "east", backHalf: "top", want: "straight"},
+		{name: "parallel", frontFacing: "north", frontHalf: "bottom", backFacing: "south", backHalf: "bottom", want: "straight"},
+		{name: "outer takes priority", frontFacing: "west", frontHalf: "bottom", backFacing: "east", backHalf: "bottom", want: "outer_left"},
+		{name: "skip front with different half", frontFacing: "west", frontHalf: "top", backFacing: "east", backHalf: "bottom", want: "inner_right"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			chunk := airChunk(t)
+			states := map[string]string{"facing": "north", "half": "bottom", "shape": "inner_right"}
+			chunk[cell(8, 8, 8)] = stateHash(t, "oak_stairs", states)
+			if test.frontFacing != "" {
+				chunk[cell(8, 8, 7)] = stateHash(t, "oak_stairs", map[string]string{"facing": test.frontFacing, "half": test.frontHalf})
+			}
+			if test.backFacing != "" {
+				chunk[cell(8, 8, 9)] = stateHash(t, "oak_stairs", map[string]string{"facing": test.backFacing, "half": test.backHalf})
+			}
+			states["shape"] = test.want
+			assertHash(t, f.Fix(chunk, Neighbours{})[cell(8, 8, 8)], stateHash(t, "oak_stairs", states))
+		})
+	}
+}
