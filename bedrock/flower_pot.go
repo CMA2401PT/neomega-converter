@@ -20,7 +20,7 @@ func flowerPot(block ir.IRBlock, entity map[string]any) ir.IRBlock {
 	if err != nil {
 		panic(err)
 	}
-	converted, ok := converts.ConvertToJava(source)
+	converted, ok := converts.ConvertToJava(source.Tidy())
 	if !ok {
 		return block
 	}
