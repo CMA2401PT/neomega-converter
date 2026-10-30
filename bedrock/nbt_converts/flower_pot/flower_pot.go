@@ -1,4 +1,4 @@
-package bedrock
+package flower_pot
 
 import (
 	"neomega-blocks/ir"
@@ -6,11 +6,15 @@ import (
 	java "neomega-blocks/presets/java/v1"
 )
 
-func init() {
-	entityRules["FlowerPot"] = flowerPot
+const ID = "FlowerPot"
+
+var pottedNameExceptions = map[string]string{
+	// 杜鹃盆栽的 Java 名称多出 bush，不能只加前缀。
+	"azalea":           "potted_azalea_bush",
+	"flowering_azalea": "potted_flowering_azalea_bush",
 }
 
-func flowerPot(block ir.IRBlock, entity map[string]any) ir.IRBlock {
+func Convert(block ir.IRBlock, entity map[string]any) ir.IRBlock {
 	// 植物的 Bedrock 名称可能与 Java 不同，先转换植物，再查询对应盆栽是否存在。
 	plant, exists := entity["PlantBlock"].(map[string]any)
 	if !exists {
@@ -24,7 +28,12 @@ func flowerPot(block ir.IRBlock, entity map[string]any) ir.IRBlock {
 	if !ok {
 		return block
 	}
-	name := "minecraft:potted_" + converted.ShortName()
+	plantName := converted.ShortName()
+	pottedName, exists := pottedNameExceptions[plantName]
+	if !exists {
+		pottedName = "potted_" + plantName
+	}
+	name := "minecraft:" + pottedName
 	if _, exists := java.BlockProperties(name); !exists {
 		return block
 	}

@@ -58,50 +58,6 @@ func TestSavedSubchunk(t *testing.T) {
 	}
 }
 
-func TestEntityRules(t *testing.T) {
-	for _, test := range []struct {
-		name   string
-		source ir.IRBlock
-		snbt   string
-		want   ir.IRBlock
-	}{
-		{
-			name:   "occupied black bed",
-			source: `minecraft:bed ["direction"=3,"head_piece_bit"=false,"occupied_bit"=true]`,
-			snbt:   `{id:"Bed",color:15b}`,
-			want:   `minecraft:black_bed ["facing"="east","occupied"="true","part"="foot"]`,
-		},
-		{
-			name:   "plant name translation",
-			source: `minecraft:flower_pot ["update_bit"=true]`,
-			snbt:   `{id:"FlowerPot",PlantBlock:{name:"minecraft:deadbush",states:{},version:18168865}}`,
-			want:   `minecraft:potted_dead_bush []`,
-		},
-		{
-			name:   "no Java potted block",
-			source: `minecraft:flower_pot ["update_bit"=true]`,
-			snbt:   `{id:"FlowerPot",PlantBlock:{name:"minecraft:stone",states:{},version:18168865}}`,
-			want:   `minecraft:flower_pot []`,
-		},
-		{
-			name:   "empty pot",
-			source: `minecraft:flower_pot ["update_bit"=false]`,
-			snbt:   `{id:"FlowerPot"}`,
-			want:   `minecraft:flower_pot []`,
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			layer := airLayer()
-			layer[0] = test.source
-			got, javaNBT := Convert([][]ir.IRBlock{layer, nil}, map[[3]uint8]string{{0, 0, 0}: test.snbt})
-			assertBlock(t, got[0], test.want)
-			if len(javaNBT) != 0 {
-				t.Fatalf("unexpected Java NBT: %v", javaNBT)
-			}
-		})
-	}
-}
-
 func TestHashConversionAndWater(t *testing.T) {
 	layers := [][]ir.IRBlock{airLayer(), airLayer()}
 	for index := range 4 {

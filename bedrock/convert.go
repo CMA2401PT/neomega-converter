@@ -3,14 +3,16 @@ package bedrock
 import (
 	"neomega-blocks/ir"
 	converts "neomega-blocks/presets/block-converts/v1"
+	"neomega-converter/bedrock/nbt_converts/bed"
+	"neomega-converter/bedrock/nbt_converts/flower_pot"
 	nbt "neomega-nbt/presets/v1"
 )
 
-type entityRule func(block ir.IRBlock, entity map[string]any) ir.IRBlock
-
-// 每种 block entity 在自己的文件中注册，新增规则无需改动转换入口。
-
-var entityRules = map[string]entityRule{}
+// 新增 NBT 规则时，新建一个子目录，并在表中加一行。
+var entityRules = map[string]func(ir.IRBlock, map[string]any) ir.IRBlock{
+	bed.ID:        bed.Convert,
+	flower_pot.ID: flower_pot.Convert,
+}
 
 func Convert(layers [][]ir.IRBlock, entities map[[3]uint8]string) (blocks []uint32, javaNBT map[[3]uint8]string) {
 	// 保留源状态交给 ConvertToJava 规范化，才能处理新增属性的 Bedrock 存档。

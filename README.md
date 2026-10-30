@@ -29,7 +29,10 @@ SNBT 按子区块内的 `[3]uint8{x, y, z}` 坐标提供。床根据 `color` 改
 第二层是任意水位的 `water` 或 `flowing_water` 时，输出状态附带 `waterlogged="true"`，其余格子沿用基础状态。
 
 返回的 Java SNBT map 是给 viewer 的 NBT 通道。床和花盆的信息已经进入方块名，所以这些转换的 map 为空。
-每种 block entity 的规则在自己的文件中注册；增加一种规则只需增加一个文件。
+每种 block entity 的规则放在 `bedrock/nbt_converts/<名字>/` 子包中，导出 `ID` 和 `Convert`，并在
+`bedrock/convert.go` 的规则表中显式列出。增加一种规则需要新建一个子目录，再在表里加一行。
+各规则的 NBT 结构和转换方式见子包中的 `NBT.md`：
+[床](bedrock/nbt_converts/bed/NBT.md)、[花盆](bedrock/nbt_converts/flower_pot/NBT.md)。
 
 下面的完整程序可保存为 `example/main.go`，在本仓库运行 `go run ./example`：
 
