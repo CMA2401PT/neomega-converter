@@ -3,7 +3,8 @@ package fixer
 import (
 	"slices"
 
-	"neomega-assets/solidtable"
+	"neomega-blocks/geometry/solidtable"
+	javasolid "neomega-blocks/presets/java/v1/solidtable"
 )
 
 type JavaBlockHash = uint32
@@ -23,7 +24,7 @@ type Fixer struct {
 }
 
 func New() (*Fixer, error) {
-	solid, err := solidtable.Bundled()
+	solid, err := javasolid.Bundled()
 	if err != nil {
 		return nil, err
 	}

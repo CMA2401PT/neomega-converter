@@ -19,9 +19,9 @@ NEMC，要经 `neomega-blocks` 的 NEMC→Java 转换才得到 Java 状态，这
 ## 哪些方块需要修，依据是什么
 
 「需要修」不是凭印象定的，而是来自一个往返分析工具：
-`neomega-blocks/presets/block-converts/scripts/java-roundtrip`。它枚举全部 Java 状态，
+`neomega-blocks/third_party/gen_resource/java-roundtrip`。它枚举全部 Java 状态，
 逐个做 Java→NEMC→Java 的往返，把回来的状态和原状态对比——对不上的，就是转换链在这个
-方块上丢了信息。结论存在同目录的 `REPORT.md`，重新生成的命令也在那里。
+方块上丢了信息。结论写入该目录的 `tmp/REPORT.md`；生成命令见 [生成工具说明](../../neomega-blocks/third_party/gen_resource/README.md)。
 
 报告本身只说明「转换后对不上」，不单独证明 Bedrock 表达不了，也不保证 fixer 一定能
 恢复。能不能恢复，取决于丢掉的信息能否从邻居关系推导，或从伙伴格保留的状态中取得。
@@ -48,8 +48,8 @@ NEMC，要经 `neomega-blocks` 的 NEMC→Java 转换才得到 Java 状态，这
 加一类新修复，就写一个 `pass` 函数，在 `New()` 的 `f.passes` 列表里登记。列表顺序就是
 执行顺序。
 
-pass 判断「邻居那一面算不算实心」时查的是**实心表**（`neomega-assets/solidtable` 内嵌的
-`geometry.nvsolid`，由 neomega-viewer 的几何生成器产出，`New()` 默认加载）。表里每个 hash 存六个 bit，对应 west/east/
+pass 判断「邻居那一面算不算实心」时查的是**实心表**（`neomega-blocks/presets/java/v1/solidtable` 内嵌的
+`geometry.nvsolid`，由 neomega-blocks 的几何生成器产出，`New()` 默认加载）。表里每个 hash 存六个 bit，对应 west/east/
 down/up/north/south 六个方向该面是否被不透明矩形完整覆盖。栅栏和 fire 要靠它判断「这面
 是实心墙，该附着上去」。注意它是**渲染语义**上的实心，不等于红石意义上的导电——这个区别
 是红石线只能做保守版的原因之一。

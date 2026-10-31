@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"neomega-assets/solidtable"
+	"neomega-blocks/geometry/solidtable"
 	"neomega-blocks/ir"
 	java "neomega-blocks/presets/java/v1"
 )

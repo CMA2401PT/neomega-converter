@@ -3,7 +3,7 @@ package fixer
 import (
 	"testing"
 
-	"neomega-assets/solidtable"
+	"neomega-blocks/geometry/solidtable"
 )
 
 func TestFireConnections(t *testing.T) {

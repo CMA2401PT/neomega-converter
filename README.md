@@ -90,7 +90,7 @@ go test ./bedrock -run TestSavedSubchunk -v
 
 ## 修复转换丢失的状态
 
-`fixer.New()` 加载 `neomega-assets/solidtable` 内嵌的实心表，多个实例共享同一份只读解码结果。`Fix` 返回独立切片，
+`fixer.New()` 加载 `neomega-blocks/presets/java/v1/solidtable` 内嵌的实心表，多个实例共享同一份只读解码结果。`Fix` 返回独立切片，
 输入层和邻居层都保持原值。状态的查询与改写通过 `neomega-blocks/presets/java/v1` 完成。
 
 当前层和每个非 nil 邻居层都应包含 4096 个 Java hash，索引为 `(x << 8) | (z << 4) | y`，与 neomega-viewer 相同。
@@ -113,6 +113,11 @@ clean := repair.Fix(blocks, fixer.Neighbours{})
 ## 实心表从哪里来
 
 fixer 判断「邻居那一面是不是实心墙」时查实心表：每个 Java 状态六个 bit，对应六个方向的面是否被不透明矩形完整覆盖。
-它要从方块几何算出来，所以由 neomega-viewer 的几何生成器产出，写到 `neomega-assets/solidtable/geometry.nvsolid`，
-再由 `neomega-assets/solidtable` 内嵌。几何表更新后，按 neomega-viewer README 的《生成和更新几何表》重新生成，
-再重新构建本仓库。
+它由 neomega-blocks 的几何生成器从同一套模型与材质计算，写入 `presets/java/v1/solidtable/geometry.nvsolid`。
+这个 preset 与完整几何表分包，fixer 只加载实心数据。更新时先手动准备生成器的六份 assets 输入，再在 neomega-blocks 根目录运行：
+
+```sh
+go generate ./presets/java/v1/geometry
+```
+
+重新生成后重新构建本仓库。输入和验证方式见[几何生成说明](../neomega-blocks/third_party/gen_resource/geometry/solid_block_table/README.md)。
