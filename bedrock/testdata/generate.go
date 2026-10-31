@@ -4,7 +4,6 @@ package main
 
 import (
 	"bytes"
-	"celler"
 	"celler/layer_storage"
 	"encoding/binary"
 	"encoding/json"
@@ -79,7 +78,7 @@ func generate(dbPath, output string) error {
 	}
 	cells := make([]cell, 0)
 	for index := range 4096 {
-		local := celler.SubChunkBlockPos{X: uint8(index >> 8), Y: uint8(index & 15), Z: uint8((index >> 4) & 15)}
+		local := layer_storage.Position{X: uint8(index >> 8), Y: uint8(index & 15), Z: uint8((index >> 4) & 15)}
 		position := [3]int{int(local.X), int(local.Y) - 64, int(local.Z)}
 		entry := cell{Position: position, SNBT: entities[position]}
 		nonAir := false
