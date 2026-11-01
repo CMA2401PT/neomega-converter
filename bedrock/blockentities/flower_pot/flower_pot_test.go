@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"neomega-blocks/ir"
+	"neomega-converter/bedrock/blockentities"
 	nbt "neomega-nbt/presets/v1"
 )
 
@@ -44,9 +45,12 @@ func TestConvert(t *testing.T) {
 			if err := nbt.DecodeFromSNBT(test.snbt, &entity, nbt.OptDecodeFromSNBT{}); err != nil {
 				t.Fatal(err)
 			}
-			got := Convert("minecraft:flower_pot []", entity)
-			if got.Tidy() != test.want.Tidy() {
-				t.Fatalf("got %s, want %s", got, test.want)
+			got, err := Convert(blockentities.Input{Base: "minecraft:flower_pot []", Source: entity})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.State.Tidy() != test.want.Tidy() {
+				t.Fatalf("got %s, want %s", got.State, test.want)
 			}
 		})
 	}

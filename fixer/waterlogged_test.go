@@ -9,22 +9,22 @@ func TestWaterloggedRepairs(t *testing.T) {
 		t.Fatal(err)
 	}
 	chunk := airChunk(t)
-	chunk[cell(8, 8, 8)] = stateHash(t, "oak_stairs", map[string]string{
+	chunk[cell(8, 8, 8)] = stateBlock(t, "oak_stairs", map[string]string{
 		"facing": "north", "shape": "straight", "waterlogged": "true",
 	})
-	chunk[cell(8, 8, 7)] = stateHash(t, "oak_stairs", map[string]string{
+	chunk[cell(8, 8, 7)] = stateBlock(t, "oak_stairs", map[string]string{
 		"facing": "west", "waterlogged": "true",
 	})
-	chunk[cell(2, 3, 4)] = stateHash(t, "oak_fence", map[string]string{"waterlogged": "true"})
-	chunk[cell(3, 3, 4)] = stateHash(t, "oak_fence", map[string]string{"waterlogged": "true"})
-	got := f.Fix(chunk, Neighbours{})
-	assertHash(t, got[cell(8, 8, 8)], stateHash(t, "oak_stairs", map[string]string{
+	chunk[cell(2, 3, 4)] = stateBlock(t, "oak_fence", map[string]string{"waterlogged": "true"})
+	chunk[cell(3, 3, 4)] = stateBlock(t, "oak_fence", map[string]string{"waterlogged": "true"})
+	got := fixSection(f, chunk, sectionNeighbours{})
+	assertBlock(t, got[cell(8, 8, 8)], stateBlock(t, "oak_stairs", map[string]string{
 		"facing": "north", "shape": "outer_left", "waterlogged": "true",
 	}))
-	assertHash(t, got[cell(2, 3, 4)], stateHash(t, "oak_fence", map[string]string{
+	assertBlock(t, got[cell(2, 3, 4)], stateBlock(t, "oak_fence", map[string]string{
 		"east": "true", "waterlogged": "true",
 	}))
-	assertHash(t, got[cell(3, 3, 4)], stateHash(t, "oak_fence", map[string]string{
+	assertBlock(t, got[cell(3, 3, 4)], stateBlock(t, "oak_fence", map[string]string{
 		"west": "true", "waterlogged": "true",
 	}))
 }

@@ -5,8 +5,12 @@ import (
 	"os"
 	"testing"
 
+	"celler"
+	cellerbedrock "celler/bedrock"
+	"celler/layer_storage"
 	"neomega-blocks/ir"
-	java "neomega-blocks/presets/java/v1"
+	"neomega-converter"
+	nbt "neomega-nbt/presets/v1"
 )
 
 func TestSavedSubchunk(t *testing.T) {
@@ -34,7 +38,8 @@ func TestSavedSubchunk(t *testing.T) {
 			entities[position] = cell.SNBT
 		}
 	}
-	blocks, javaNBT := Convert(layers, entities)
+	converted := convertFixture(t, layers, entities, -4)
+	blocks, javaNBT := converted.Sections[-4].Blocks, converted.BlockEntities
 	if len(javaNBT) != 0 {
 		t.Fatalf("unexpected Java NBT: %v", javaNBT)
 	}
@@ -53,12 +58,12 @@ func TestSavedSubchunk(t *testing.T) {
 		{[3]int{3, -60, 2}, `minecraft:smooth_quartz_stairs ["facing"="north","half"="bottom","shape"="straight","waterlogged"="true"]`},
 	} {
 		index := (test.position[0] << 8) | (test.position[2] << 4) | (test.position[1] + 64)
-		assertBlock(t, blocks[index], test.want)
+		assertBlock(t, blocks.Get(layer_storage.At(index>>8, index&15, index>>4&15)), test.want)
 		t.Logf("%v -> %s", test.position, test.want.Tidy())
 	}
 }
 
-func TestHashConversionAndWater(t *testing.T) {
+func TestChunkConversionAndWater(t *testing.T) {
 	layers := [][]ir.IRBlock{airLayer(), airLayer()}
 	for index := range 4 {
 		layers[0][index] = `minecraft:cobblestone []`
@@ -69,13 +74,6 @@ func TestHashConversionAndWater(t *testing.T) {
 	layers[0][4] = `minecraft:missing_block []`
 	layers[1][4] = layers[1][0]
 	layers[0][5] = `minecraft:bed ["direction"=2,"head_piece_bit"=true,"occupied_bit"=false]`
-	hashes := make([][]uint32, len(layers))
-	for layer, blocks := range layers {
-		hashes[layer] = make([]uint32, len(blocks))
-		for index, block := range blocks {
-			hashes[layer][index] = block.Tidy().Hash()
-		}
-	}
 	entities := map[[3]uint8]string{{0, 5, 0}: `{id:"Bed",color:8b}`, {0, 3, 0}: `{id:"Chest",Items:[]}`}
 	want := []ir.IRBlock{
 		`minecraft:cobblestone ["waterlogged"="true"]`,
@@ -85,23 +83,23 @@ func TestHashConversionAndWater(t *testing.T) {
 		`minecraft:air []`,
 		`minecraft:light_gray_bed ["facing"="north","occupied"="false","part"="head"]`,
 	}
-	fromBlocks, _ := Convert(layers, entities)
-	fromHashes, javaNBT := ConvertHashes(hashes, entities)
+	converted := convertFixture(t, layers, entities, 0)
 	for index, block := range want {
-		assertBlock(t, fromBlocks[index], block)
-		assertBlock(t, fromHashes[index], block)
+		assertBlock(t, converted.Sections[0].Blocks.Get(layer_storage.At(0, index, 0)), block)
 	}
-	if len(javaNBT) != 0 {
-		t.Fatalf("unexpected Java NBT: %v", javaNBT)
+	if len(converted.BlockEntities) != 0 {
+		t.Fatalf("unexpected Java NBT: %v", converted.BlockEntities)
 	}
-	dry, _ := ConvertHashes([][]uint32{hashes[0], nil}, nil)
-	assertBlock(t, dry[0], "minecraft:cobblestone []")
+	if len(converted.Diagnostics) != 1 || converted.Diagnostics[0].Kind != converter.UnknownBlock || converted.Diagnostics[0].Count != 1 {
+		t.Fatalf("unexpected diagnostics: %+v", converted.Diagnostics)
+	}
+	dry := convertFixture(t, layers[:1], nil, 0)
+	assertBlock(t, dry.Sections[0].Blocks.Get(layer_storage.At(0, 0, 0)), "minecraft:cobblestone []")
 
-	// 新版属性只有源状态能保留；hash 入口无法从表外值恢复它。
-	newer := ir.IRBlock(`minecraft:smooth_quartz_stairs ["minecraft:corner"="inner_left","upside_down_bit"=false,"weirdo_direction"=3]`)
-	hashes[0][0] = newer.Hash()
-	unknown, _ := ConvertHashes(hashes, nil)
-	assertBlock(t, unknown[0], "minecraft:air []")
+	// 源状态保留新版属性，转换表负责按目标版本规范化。
+	layers[0][0] = ir.IRBlock(`minecraft:smooth_quartz_stairs ["minecraft:corner"="inner_left","upside_down_bit"=false,"weirdo_direction"=3]`)
+	newer := convertFixture(t, layers[:1], nil, 0)
+	assertBlock(t, newer.Sections[0].Blocks.Get(layer_storage.At(0, 0, 0)), `minecraft:smooth_quartz_stairs ["facing"="north","half"="bottom","shape"="straight"]`)
 }
 
 func airLayer() []ir.IRBlock {
@@ -112,10 +110,48 @@ func airLayer() []ir.IRBlock {
 	return layer
 }
 
-func assertBlock(t *testing.T, hash uint32, want ir.IRBlock) {
+func assertBlock(t *testing.T, got, want ir.IRBlock) {
 	t.Helper()
-	got, ok := java.HashToBlock(hash)
-	if !ok || got != want.Tidy() {
-		t.Fatalf("hash %d -> (%s, %v), want %s", hash, got, ok, want.Tidy())
+	if got != want.Tidy() {
+		t.Fatalf("got %s, want %s", got, want.Tidy())
 	}
+}
+
+func fixtureChunk(t *testing.T, layers [][]ir.IRBlock, entities map[[3]uint8]string, y int32) *cellerbedrock.Chunk {
+	// fixture 的位置对应真实 section 高度，实体坐标写入原生 NBT 后随区块读取。
+	t.Helper()
+	chunk := cellerbedrock.NewChunk(celler.ChunkPos{}, 0)
+	section := &cellerbedrock.Section{Y: y, Version: 9}
+	for _, states := range layers {
+		layer := cellerbedrock.NewLayer(cellerbedrock.Block{State: air})
+		for index, state := range states {
+			layer.Blocks.Set(layer_storage.At(index>>8, index&15, index>>4&15), cellerbedrock.Block{State: state.Tidy(), Version: 18168865})
+		}
+		section.Layers = append(section.Layers, layer)
+	}
+	if err := chunk.SetSection(section); err != nil {
+		t.Fatal(err)
+	}
+	var documents []nbt.Document
+	for pos, text := range entities {
+		var value nbt.Compound
+		if err := nbt.DecodeFromSNBT(text, &value, nbt.OptDecodeFromSNBT{}); err != nil {
+			t.Fatal(err)
+		}
+		value["x"], value["y"], value["z"] = int32(pos[0]), y*16+int32(pos[1]), int32(pos[2])
+		documents = append(documents, nbt.Document{Value: value})
+	}
+	if err := chunk.SetBlockEntities(documents); err != nil {
+		t.Fatal(err)
+	}
+	return chunk
+}
+
+func convertFixture(t *testing.T, layers [][]ir.IRBlock, entities map[[3]uint8]string, y int32) *converter.ConvertedChunk {
+	t.Helper()
+	converted, err := ConvertChunk(fixtureChunk(t, layers, entities, y))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return converted
 }

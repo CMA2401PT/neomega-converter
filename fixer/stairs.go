@@ -4,10 +4,10 @@ import (
 	"strings"
 
 	"neomega-blocks/ir"
-	java "neomega-blocks/presets/java/v1"
 )
 
 type stairDirection struct {
+	// 方向向量用于判定左右转向，面编号用于读取前后邻居。
 	x, z int
 	side int
 }
@@ -19,27 +19,27 @@ var stairDirections = map[string]stairDirection{
 	"south": {x: 0, z: 1, side: 5},
 }
 
-func (f *Fixer) stairShapes(subchunk []JavaBlockHash, neighbours Neighbours) map[int]JavaBlockHash {
-	changes := make(map[int]JavaBlockHash)
-	for index, hash := range subchunk {
-		block, ok := java.HashToBlock(hash)
-		if !ok || !strings.HasSuffix(block.ShortName(), "_stairs") {
+func (f *Fixer) stairShapes(view snapshot) map[position]ir.IRBlock {
+	// 楼梯朝向和上下半部保持原值，只根据前后伙伴补全拐角。
+	changes := make(map[position]ir.IRBlock)
+	for pos, block := range view.blocks {
+		if !strings.HasSuffix(block.ShortName(), "_stairs") {
 			continue
 		}
 		states := block.States()
 		facing, _ := states.Get("facing")
 		half, _ := states.Get("half")
-		shape := stairShape(subchunk, neighbours, index, stairDirections[facing.(string)], half)
+		shape := stairShape(view.get, pos, stairDirections[facing.(string)], half)
 		states = states.Set("shape", shape)
 		updated := ir.IRBlock(block.NameWithNameSpace() + " " + string(states)).Tidy()
-		if newHash := java.BlockToHash(updated); newHash != hash {
-			changes[index] = newHash
+		if updated != block {
+			changes[pos] = updated
 		}
 	}
 	return changes
 }
 
-func stairShape(subchunk []JavaBlockHash, neighbours Neighbours, index int, facing stairDirection, half any) string {
+func stairShape(get blockGetter, pos position, facing stairDirection, half any) string {
 	// X 向东、Z 向南；面对 F=(x,z)，左为 (z,-x)，右为 (-z,x)。
 	// 例如 north 左为 west，east 左为 north；与原版一致，邻居朝向为左转方向时取 *_left。
 	// TODO: 尚未实现 vanilla 的额外邻居抵消检查，仅计算前后楼梯的主干规则。
@@ -50,12 +50,8 @@ func stairShape(subchunk []JavaBlockHash, neighbours Neighbours, index int, faci
 		{side: facing.side, left: "outer_left", right: "outer_right"},
 		{side: facing.side ^ 1, left: "inner_left", right: "inner_right"},
 	} {
-		hash, exists := neighbour(subchunk, neighbours, index, candidate.side)
-		if !exists {
-			continue
-		}
-		other, ok := java.HashToBlock(hash)
-		if !ok || !strings.HasSuffix(other.ShortName(), "_stairs") {
+		other, _ := neighbour(get, pos, candidate.side)
+		if !strings.HasSuffix(other.ShortName(), "_stairs") {
 			continue
 		}
 		otherHalf, _ := other.States().Get("half")

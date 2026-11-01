@@ -7,7 +7,7 @@ func TestRedstoneConnections(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wire := stateHash(t, "redstone_wire", map[string]string{
+	wire := stateBlock(t, "redstone_wire", map[string]string{
 		"power": "7", "north": "up", "east": "up", "south": "up", "west": "up",
 	})
 	type placement struct {
@@ -110,7 +110,7 @@ func TestRedstoneConnections(t *testing.T) {
 			chunk[index] = wire
 			for _, block := range test.blocks {
 				// 邻线保持默认连接，验证判定只看名称。
-				chunk[cell(block.x, block.y, block.z)] = stateHash(t, block.name, nil)
+				chunk[cell(block.x, block.y, block.z)] = stateBlock(t, block.name, nil)
 			}
 			want := wire
 			if len(test.sides) != 0 {
@@ -120,11 +120,11 @@ func TestRedstoneConnections(t *testing.T) {
 				for _, side := range test.sides {
 					states[side] = "side"
 				}
-				want = stateHash(t, "redstone_wire", states)
+				want = stateBlock(t, "redstone_wire", states)
 			}
-			got := f.Fix(chunk, Neighbours{})
-			assertHash(t, got[index], want)
-			if _, changed := f.redstoneConnections(got, Neighbours{})[index]; changed {
+			got := fixSection(f, chunk, sectionNeighbours{})
+			assertBlock(t, got[index], want)
+			if _, changed := runPass(f.redstoneConnections, got, sectionNeighbours{})[index]; changed {
 				t.Fatal("unchanged wire was reported as a change")
 			}
 		})
@@ -133,7 +133,7 @@ func TestRedstoneConnections(t *testing.T) {
 
 func TestRedstoneBoundaries(t *testing.T) {
 	f := &Fixer{}
-	wire := stateHash(t, "redstone_wire", map[string]string{
+	wire := stateBlock(t, "redstone_wire", map[string]string{
 		"power": "11", "north": "up", "east": "up", "south": "up", "west": "up",
 	})
 	for _, test := range []struct {
@@ -152,10 +152,10 @@ func TestRedstoneBoundaries(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			chunk := airChunk(t)
 			chunk[test.current], chunk[test.connected] = wire, wire
-			if _, changed := f.redstoneConnections(chunk, Neighbours{})[test.current]; changed {
+			if _, changed := runPass(f.redstoneConnections, chunk, sectionNeighbours{})[test.current]; changed {
 				t.Fatal("wire changed with missing neighbour data")
 			}
-			var neighbours Neighbours
+			var neighbours sectionNeighbours
 			neighbours[test.side] = airChunk(t)
 			states := map[string]string{
 				"power": "11", "north": "none", "east": "none", "south": "none", "west": "none",
@@ -163,9 +163,9 @@ func TestRedstoneBoundaries(t *testing.T) {
 			for _, side := range test.sides {
 				states[side] = "side"
 			}
-			assertHash(t, f.redstoneConnections(chunk, neighbours)[test.current], stateHash(t, "redstone_wire", states))
+			assertBlock(t, runPass(f.redstoneConnections, chunk, neighbours)[test.current], stateBlock(t, "redstone_wire", states))
 			neighbours[test.side][test.probe] = wire
-			if _, changed := f.redstoneConnections(chunk, neighbours)[test.current]; changed {
+			if _, changed := runPass(f.redstoneConnections, chunk, neighbours)[test.current]; changed {
 				t.Fatal("wire changed with a slope in an adjacent subchunk")
 			}
 		})
@@ -174,16 +174,16 @@ func TestRedstoneBoundaries(t *testing.T) {
 
 func TestRedstoneMissingDiagonal(t *testing.T) {
 	chunk := airChunk(t)
-	wire := stateHash(t, "redstone_wire", map[string]string{
+	wire := stateBlock(t, "redstone_wire", map[string]string{
 		"north": "up", "east": "up", "south": "up", "west": "up",
 	})
 	chunk[cell(0, 15, 8)], chunk[cell(1, 15, 8)] = wire, wire
-	var neighbours Neighbours
+	var neighbours sectionNeighbours
 	for side := range neighbours {
 		neighbours[side] = airChunk(t)
 	}
 	f := &Fixer{}
-	if _, changed := f.redstoneConnections(chunk, neighbours)[cell(0, 15, 8)]; changed {
+	if _, changed := runPass(f.redstoneConnections, chunk, neighbours)[cell(0, 15, 8)]; changed {
 		t.Fatal("wire changed without the diagonal subchunk needed above the west neighbour")
 	}
 }

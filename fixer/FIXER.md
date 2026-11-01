@@ -5,16 +5,24 @@ NEMC，要经 `neomega-blocks` 的 NEMC→Java 转换才得到 Java 状态，这
 丢成默认值——最典型的是连接方向：一段本该四向相连的栅栏，转换后每个方向都成了
 `false`。几何表按 hash 查形状，拿到的就是一段孤立的栅栏柱，渲染出来是错的。
 
-`fixer` 是转换之后的修正步骤，属于转换这一侧；Java 本来的数据不需要它。它拿整个
-16×16×16 子区块和六面邻居。
+`fixer` 是转换之后的修正步骤，属于转换这一侧；Java 本来的数据不需要它。
+`Fix(center *converter.ConvertedChunk, neighbours ChunkNeighbours) *converter.ConvertedChunk`
+接收中心柱子与周围八根柱子的阶段 1 结果。
+`ChunkNeighbours` 按 NW/N/NE/W/E/SW/S/SE 命名常量提供。
 连接属性按邻居关系重算，门的属性从上下伙伴格补全。
-处理后返回一层新的 hash，再交给 viewer。
+处理后返回新的中心区块，有改动的 section 换用新调色板，未改动的共享输入。
+
+单 section 预览使用
+`FixSection(section *layer_storage.Palette[ir.IRBlock], neighbours [6]*layer_storage.Palette[ir.IRBlock]) *layer_storage.Palette[ir.IRBlock]`。
+六面邻居顺序为 west/east/down/up/north/south。
+两个入口共用取格函数和 pass，内部直接处理 `ir.IRBlock`。
+viewer 在调用边界处理 hash 与状态的转换。
 它只改方块状态，不碰几何，也不依赖几何运行时。
-状态的查询与改写都走 `neomega-blocks/presets/java/v1`。
+状态属性通过 `ir.IRBlock` 查询与改写，属性表和实心表的 hash 查询使用 `neomega-blocks/presets/java/v1`。
 
 这份文档讲三件 README 的使用说明不讲的事：**哪些方块需要修、依据是什么**，**已经实现
 了哪些修复**，以及**哪些还没搞定、难在哪**。想知道怎么调用，看本仓库
-[README](../README.md) 的《修复转换丢失的状态》一节。
+[README](../README.md) 的《阶段 2：修复邻接状态》一节。
 
 ## 哪些方块需要修，依据是什么
 
@@ -39,9 +47,11 @@ NEMC，要经 `neomega-blocks` 的 NEMC→Java 转换才得到 Java 状态，这
 错误不止一种。今天发现栏杆连接丢了，明天可能发现别的属性也丢了，所以 fixer 不是一个
 大函数，而是一串 pass——每个 pass 负责修一类错误。
 
-一个 pass 的签名是 `func(subchunk, neighbours) map[int]JavaBlockHash`：它只读当前层和
-邻居，返回「位置 → 新 hash」的改动，自己不落笔。`Fixer.Fix` 把所有 pass 串起来，一轮
-跑完统一应用改动，下一轮才看得到上一轮的结果。这样每个 pass 内部永远在读一个一致的
+一个 pass 的签名是 `func(snapshot) map[position]ir.IRBlock`：它只读中心柱子和
+邻居，返回「位置 → 新状态」的改动，自己不落笔。
+取格坐标的 x、z 相对中心区块原点，y 是世界绝对高度。
+取格返回状态和数据是否存在的标记，缺失时返回空气与 false。
+两个入口把所有 pass 串起来，一轮收齐整根中心柱子的改动后统一应用，下一轮才看得到上一轮的结果。这样每个 pass 内部永远在读一个一致的
 快照，不会出现「同一轮里 A 格改了、B 格读到的是 A 的新值还是旧值」这种顺序依赖。邻居
 层在整个过程里始终是调用者传入的原始快照，不随 pass 变化。
 
@@ -92,19 +102,19 @@ left/right 的约定与原版相同：邻居楼梯的朝向是本块朝向左转
 下半格从正上方的上半格取得 `hinge`。
 
 只有同名的门、且 `half` 为相对的上下半格时，才能作为伙伴补全属性。
-伙伴跨越子区块边界时，从调用方传入的 up 或 down 邻居层读取。
+伙伴跨越 section 边界时，区块入口读取同一柱子的相邻 section，单 section 入口读取 up 或 down 邻居层。
 伙伴缺失或不匹配时保留原值。
 两半都读取同一轮的原始快照，再由框架统一应用改动。
 `powered` 在两半中都已丢失，无法据此恢复，pass 保留其输入值。
 
 真实往返用例位于 `doors_test.go`。
-在 viewer 根目录运行 `go test ./fixer -run TestDoor`，可验证朝向、合页、开关组合与跨子区块补全。
+在 neomega-converter 模块目录运行 `go test ./fixer -run TestDoor`，可验证朝向、合页、开关组合与跨子区块补全。
 
 ### snowy.go — 草方块、菌丝、灰化土的 `snowy`
 
 `snowy` 只表示正上方是不是雪，往返后丢成了 `false`。原版的规则是：上方一格属于 `#minecraft:snow` 标签
 （`snow`、`snow_block`、`powder_snow`）时为 `true`，否则为 `false`。pass 按这条规则重算。
-上方格在子区块外时从 up 邻居层读取，邻居层缺失按空气处理。
+上方格在 section 外时经统一取格函数读取，缺失按空气处理。
 
 ### redstone.go — 红石线连接（保守版）
 
@@ -130,8 +140,8 @@ left/right 的约定与原版相同：邻居楼梯的朝向是本块朝向左转
 
 - 需要红石专用的「导电性 / 支撑面 / 信号源」判定。这跟渲染用的实心表**不是一回事**——
   一个方块渲染上实心，不代表它红石意义上导电，反之亦然。要做精确版得单独准备这份数据。
-- 红石线会沿方块侧面向上下爬（坡道），判断坡道要看斜对角和上下格；六面邻居给不全斜向
-  的格子，跨子区块时更拿不到。
+- 红石线会沿方块侧面向上下爬（坡道），判断坡道要看斜对角和上下格。区块入口可读取邻居柱子的相邻 section；
+  单 section 入口的六面邻居仍无法提供同时跨两轴的格子。数据缺失时整根线跳过不改。
 - 最关键的：一根**四面都不连**的红石线，在 Java 里到底显示成一个点还是一个十字，这个
   信息在转换时已经彻底丢了，没有任何邻居关系能把它还原回来。
 

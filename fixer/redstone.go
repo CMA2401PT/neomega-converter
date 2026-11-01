@@ -2,11 +2,11 @@ package fixer
 
 import (
 	"neomega-blocks/ir"
-	java "neomega-blocks/presets/java/v1"
 )
 
-func (f *Fixer) redstoneConnections(subchunk []JavaBlockHash, neighbours Neighbours) map[int]JavaBlockHash {
-	changes := make(map[int]JavaBlockHash)
+func (f *Fixer) redstoneConnections(view snapshot) map[position]ir.IRBlock {
+	// 只修能排除元件和坡道的平面连线，缺失数据时保留原有形状。
+	changes := make(map[position]ir.IRBlock)
 	directions := [...]struct {
 		name string
 		side int
@@ -18,21 +18,16 @@ func (f *Fixer) redstoneConnections(subchunk []JavaBlockHash, neighbours Neighbo
 		{name: "south", side: 5, z: 1},
 	}
 wireLoop:
-	for index, hash := range subchunk {
-		block, ok := java.HashToBlock(hash)
-		if !ok || block.NameWithNameSpace() != "minecraft:redstone_wire" {
+	for pos, block := range view.blocks {
+		if block.NameWithNameSpace() != "minecraft:redstone_wire" {
 			continue
 		}
-		x, y, z := index>>8, index&15, (index>>4)&15
+		x, y, z := pos.x, pos.y, pos.z
 		var connected [4]bool
 		count, single := 0, 0
 		for i, direction := range directions {
-			otherHash, exists := neighbour(subchunk, neighbours, index, direction.side)
+			other, exists := neighbour(view.get, pos, direction.side)
 			if !exists {
-				continue wireLoop
-			}
-			other, ok := java.HashToBlock(otherHash)
-			if !ok {
 				continue wireLoop
 			}
 			switch other.NameWithNameSpace() {
@@ -49,12 +44,11 @@ wireLoop:
 			}
 			// 邻格上下有线就可能形成坡道；缺格时也无法排除坡道。
 			for _, dy := range [...]int{-1, 1} {
-				verticalHash, exists := redstoneBlockAt(subchunk, neighbours, x+direction.x, y+dy, z+direction.z)
+				vertical, exists := view.get(x+direction.x, y+dy, z+direction.z)
 				if !exists {
 					continue wireLoop
 				}
-				vertical, ok := java.HashToBlock(verticalHash)
-				if !ok || vertical.NameWithNameSpace() == "minecraft:redstone_wire" {
+				if vertical.NameWithNameSpace() == "minecraft:redstone_wire" {
 					continue wireLoop
 				}
 			}
@@ -74,36 +68,9 @@ wireLoop:
 			states = states.Set(direction.name, value)
 		}
 		updated := ir.IRBlock(block.NameWithNameSpace() + " " + string(states)).Tidy()
-		if newHash := java.BlockToHash(updated); newHash != hash {
-			changes[index] = newHash
+		if updated != block {
+			changes[pos] = updated
 		}
 	}
 	return changes
-}
-
-// 坐标始终相对当前子区块，先合成水平和垂直偏移，再选择所属子区块。
-func redstoneBlockAt(subchunk []JavaBlockHash, neighbours Neighbours, x, y, z int) (JavaBlockHash, bool) {
-	position := [3]int{x, y, z}
-	outsideSide := -1
-	for axis, coordinate := range position {
-		if coordinate >= 0 && coordinate < 16 {
-			continue
-		}
-		if outsideSide != -1 {
-			// 同时越过两轴需要斜对角子区块，六面 neighbours 无法提供。
-			return 0, false
-		}
-		outsideSide = axis * 2
-		if coordinate >= 16 {
-			outsideSide++
-		}
-		position[axis] &= 15
-	}
-	if outsideSide != -1 {
-		subchunk = neighbours[outsideSide]
-		if subchunk == nil {
-			return 0, false
-		}
-	}
-	return subchunk[(position[0]<<8)|(position[2]<<4)|position[1]], true
 }

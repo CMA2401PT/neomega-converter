@@ -1,6 +1,7 @@
 package fixer
 
 import (
+	java "neomega-blocks/presets/java/v1"
 	"testing"
 
 	"neomega-blocks/geometry/solidtable"
@@ -11,7 +12,7 @@ func TestFireConnections(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stone := stateHash(t, "stone", nil)
+	stone := stateBlock(t, "stone", nil)
 	for _, test := range []struct {
 		name     string
 		side     int
@@ -26,7 +27,7 @@ func TestFireConnections(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			chunk := airChunk(t)
-			chunk[cell(8, 8, 8)] = stateHash(t, "fire", map[string]string{
+			chunk[cell(8, 8, 8)] = stateBlock(t, "fire", map[string]string{
 				"age": "7", "north": "true", "east": "true", "south": "true", "west": "true", "up": "true",
 			})
 			states := map[string]string{
@@ -36,19 +37,19 @@ func TestFireConnections(t *testing.T) {
 				chunk[test.adjacent] = stone
 				states[test.name] = "true"
 			}
-			want := stateHash(t, "fire", states)
-			got := f.Fix(chunk, Neighbours{})
-			assertHash(t, got[cell(8, 8, 8)], want)
-			if len(f.fireConnections(got, Neighbours{})) != 0 {
+			want := stateBlock(t, "fire", states)
+			got := fixSection(f, chunk, sectionNeighbours{})
+			assertBlock(t, got[cell(8, 8, 8)], want)
+			if len(runPass(f.fireConnections, got, sectionNeighbours{})) != 0 {
 				t.Fatal("unchanged fire was reported as a change")
 			}
 			if test.name != "air" {
 				// 单面实心才能分辨是否取了邻居朝回火的面。
-				oneFace := &Fixer{solid: solidtable.Table{stone: 1 << (test.side ^ 1)}}
-				assertHash(t, oneFace.fireConnections(chunk, Neighbours{})[cell(8, 8, 8)], want)
-				oneFace.solid[stone] = 1 << test.side
+				oneFace := &Fixer{solid: solidtable.Table{java.BlockToHash(stone): 1 << (test.side ^ 1)}}
+				assertBlock(t, runPass(oneFace.fireConnections, chunk, sectionNeighbours{})[cell(8, 8, 8)], want)
+				oneFace.solid[java.BlockToHash(stone)] = 1 << test.side
 				states[test.name] = "false"
-				assertHash(t, oneFace.fireConnections(chunk, Neighbours{})[cell(8, 8, 8)], stateHash(t, "fire", states))
+				assertBlock(t, runPass(oneFace.fireConnections, chunk, sectionNeighbours{})[cell(8, 8, 8)], stateBlock(t, "fire", states))
 			}
 		})
 	}

@@ -5,12 +5,12 @@ import (
 	java "neomega-blocks/presets/java/v1"
 )
 
-func (f *Fixer) fireConnections(subchunk []JavaBlockHash, neighbours Neighbours) map[int]JavaBlockHash {
-	changes := make(map[int]JavaBlockHash)
+func (f *Fixer) fireConnections(view snapshot) map[position]ir.IRBlock {
+	// 火的附着方向依赖邻居朝回当前格的面，保留状态中的燃烧年龄。
+	changes := make(map[position]ir.IRBlock)
 	properties, _ := java.BlockProperties("minecraft:fire")
-	for index, hash := range subchunk {
-		block, ok := java.HashToBlock(hash)
-		if !ok || block.NameWithNameSpace() != "minecraft:fire" {
+	for pos, block := range view.blocks {
+		if block.NameWithNameSpace() != "minecraft:fire" {
 			continue
 		}
 		states := block.States()
@@ -29,14 +29,15 @@ func (f *Fixer) fireConnections(subchunk []JavaBlockHash, neighbours Neighbours)
 			}
 			value := "false"
 			// 用实心面近似附着；side^1 是邻居朝回火的那一面。
-			if other, exists := neighbour(subchunk, neighbours, index, direction.side); exists && f.solid[other]&(1<<(direction.side^1)) != 0 {
+			other, _ := neighbour(view.get, pos, direction.side)
+			if f.faces(other, view.solid)&(1<<(direction.side^1)) != 0 {
 				value = "true"
 			}
 			states = states.Set(direction.name, value)
 		}
 		updated := ir.IRBlock(block.NameWithNameSpace() + " " + string(states)).Tidy()
-		if newHash := java.BlockToHash(updated); newHash != hash {
-			changes[index] = newHash
+		if updated != block {
+			changes[pos] = updated
 		}
 	}
 	return changes

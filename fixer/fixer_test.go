@@ -11,7 +11,7 @@ import (
 	java "neomega-blocks/presets/java/v1"
 )
 
-func stateHash(t *testing.T, name string, overrides map[string]string) JavaBlockHash {
+func stateBlock(t *testing.T, name string, overrides map[string]string) ir.IRBlock {
 	t.Helper()
 	properties, ok := java.BlockProperties(name)
 	if !ok {
@@ -30,13 +30,13 @@ func stateHash(t *testing.T, name string, overrides map[string]string) JavaBlock
 	if _, ok := java.HashToBlock(hash); !ok {
 		t.Fatalf("state absent from preset: %s", block)
 	}
-	return hash
+	return block
 }
 
-func airChunk(t *testing.T) []JavaBlockHash {
+func airChunk(t *testing.T) []ir.IRBlock {
 	t.Helper()
-	chunk := make([]JavaBlockHash, 4096)
-	air := stateHash(t, "air", nil)
+	chunk := make([]ir.IRBlock, 4096)
+	air := stateBlock(t, "air", nil)
 	for index := range chunk {
 		chunk[index] = air
 	}
@@ -45,12 +45,10 @@ func airChunk(t *testing.T) []JavaBlockHash {
 
 func cell(x, y, z int) int { return (x << 8) | (z << 4) | y }
 
-func assertHash(t *testing.T, got, want JavaBlockHash) {
+func assertBlock(t *testing.T, got, want ir.IRBlock) {
 	t.Helper()
 	if got != want {
-		gotBlock, _ := java.HashToBlock(got)
-		wantBlock, _ := java.HashToBlock(want)
-		t.Fatalf("got %d (%s), want %d (%s)", got, gotBlock, want, wantBlock)
+		t.Fatalf("got %s, want %s", got, want)
 	}
 }
 
@@ -60,26 +58,26 @@ func TestFenceConnections(t *testing.T) {
 		t.Fatal(err)
 	}
 	chunk := airChunk(t)
-	fence := stateHash(t, "oak_fence", nil)
+	fence := stateBlock(t, "oak_fence", nil)
 	chunk[cell(2, 3, 4)], chunk[cell(3, 3, 4)] = fence, fence
-	chunk[cell(7, 8, 9)] = stateHash(t, "oak_fence", map[string]string{
+	chunk[cell(7, 8, 9)] = stateBlock(t, "oak_fence", map[string]string{
 		"north": "true", "east": "true", "south": "true", "west": "true",
 	})
 	chunk[cell(11, 12, 13)] = fence
-	chunk[cell(11, 12, 12)] = stateHash(t, "stone", nil)
+	chunk[cell(11, 12, 12)] = stateBlock(t, "stone", nil)
 	original := slices.Clone(chunk)
-	got := f.Fix(chunk, Neighbours{})
-	assertHash(t, got[cell(2, 3, 4)], stateHash(t, "oak_fence", map[string]string{"east": "true"}))
-	assertHash(t, got[cell(3, 3, 4)], stateHash(t, "oak_fence", map[string]string{"west": "true"}))
-	assertHash(t, got[cell(7, 8, 9)], fence)
-	assertHash(t, got[cell(11, 12, 13)], stateHash(t, "oak_fence", map[string]string{"north": "true"}))
+	got := fixSection(f, chunk, sectionNeighbours{})
+	assertBlock(t, got[cell(2, 3, 4)], stateBlock(t, "oak_fence", map[string]string{"east": "true"}))
+	assertBlock(t, got[cell(3, 3, 4)], stateBlock(t, "oak_fence", map[string]string{"west": "true"}))
+	assertBlock(t, got[cell(7, 8, 9)], fence)
+	assertBlock(t, got[cell(11, 12, 13)], stateBlock(t, "oak_fence", map[string]string{"north": "true"}))
 	if !slices.Equal(chunk, original) {
 		t.Fatal("Fix changed its input")
 	}
-	if !slices.Equal(f.Fix(got, Neighbours{}), got) {
+	if !slices.Equal(fixSection(f, got, sectionNeighbours{}), got) {
 		t.Fatal("connection repair is not idempotent")
 	}
-	if len(f.connections(got, Neighbours{})) != 0 {
+	if len(runPass(f.connections, got, sectionNeighbours{})) != 0 {
 		t.Fatal("unchanged hashes were reported as changes")
 	}
 }
@@ -117,25 +115,25 @@ func TestConnectionFamilies(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			chunk := airChunk(t)
-			chunk[cell(4, 7, 9)] = stateHash(t, test.block, nil)
+			chunk[cell(4, 7, 9)] = stateBlock(t, test.block, nil)
 			overrides := map[string]string{}
 			if test.facing != "" {
 				overrides["facing"] = test.facing
 			}
-			chunk[cell(5, 7, 9)] = stateHash(t, test.other, overrides)
+			chunk[cell(5, 7, 9)] = stateBlock(t, test.other, overrides)
 			value := "false"
 			if test.connected {
 				value = "true"
 			}
-			got := f.Fix(chunk, Neighbours{})
-			assertHash(t, got[cell(4, 7, 9)], stateHash(t, test.block, map[string]string{"east": value}))
+			got := fixSection(f, chunk, sectionNeighbours{})
+			assertBlock(t, got[cell(4, 7, 9)], stateBlock(t, test.block, map[string]string{"east": value}))
 		})
 	}
 }
 
 func TestBoundaryConnections(t *testing.T) {
-	fence := stateHash(t, "oak_fence", nil)
-	stone := stateHash(t, "stone", nil)
+	fence := stateBlock(t, "oak_fence", nil)
+	stone := stateBlock(t, "stone", nil)
 	for _, test := range []struct {
 		name     string
 		side     int
@@ -154,38 +152,40 @@ func TestBoundaryConnections(t *testing.T) {
 			}
 			chunk, adjacent := airChunk(t), airChunk(t)
 			chunk[test.current], adjacent[test.adjacent] = fence, fence
-			var neighbours Neighbours
+			var neighbours sectionNeighbours
 			neighbours[test.side] = adjacent
-			want := stateHash(t, "oak_fence", map[string]string{test.name: "true"})
-			assertHash(t, f.Fix(chunk, neighbours)[test.current], want)
-			assertHash(t, adjacent[test.adjacent], fence)
-			assertHash(t, f.Fix(chunk, Neighbours{})[test.current], fence)
+			want := stateBlock(t, "oak_fence", map[string]string{test.name: "true"})
+			assertBlock(t, fixSection(f, chunk, neighbours)[test.current], want)
+			assertBlock(t, adjacent[test.adjacent], fence)
+			assertBlock(t, fixSection(f, chunk, sectionNeighbours{})[test.current], fence)
 
 			// 只给一面实心，区分朝向当前格与背向当前格的查询。
 			adjacent[test.adjacent] = stone
-			f.solid = solidtable.Table{stone: 1 << (test.side ^ 1)}
-			assertHash(t, f.Fix(chunk, neighbours)[test.current], want)
-			f.solid = solidtable.Table{stone: 1 << test.side}
-			assertHash(t, f.Fix(chunk, neighbours)[test.current], fence)
+			f.solid = solidtable.Table{java.BlockToHash(stone): 1 << (test.side ^ 1)}
+			assertBlock(t, fixSection(f, chunk, neighbours)[test.current], want)
+			f.solid = solidtable.Table{java.BlockToHash(stone): 1 << test.side}
+			assertBlock(t, fixSection(f, chunk, neighbours)[test.current], fence)
 		})
 	}
 }
 
 func TestPassesAccumulate(t *testing.T) {
 	chunk := airChunk(t)
-	stone := stateHash(t, "stone", nil)
-	fence := stateHash(t, "oak_fence", nil)
+	stone := stateBlock(t, "stone", nil)
+	fence := stateBlock(t, "oak_fence", nil)
+	third, fourth := position{y: 3}, position{y: 4}
 	f := &Fixer{passes: []pass{
-		func(current []JavaBlockHash, neighbours Neighbours) map[int]JavaBlockHash {
-			return map[int]JavaBlockHash{3: stone}
+		func(view snapshot) map[position]ir.IRBlock {
+			return map[position]ir.IRBlock{third: stone}
 		},
-		func(current []JavaBlockHash, neighbours Neighbours) map[int]JavaBlockHash {
-			assertHash(t, current[3], stone)
-			return map[int]JavaBlockHash{3: fence, 4: current[3]}
+		func(view snapshot) map[position]ir.IRBlock {
+			current, _ := view.get(0, 3, 0)
+			assertBlock(t, current, stone)
+			return map[position]ir.IRBlock{third: fence, fourth: current}
 		},
 	}}
-	got := f.Fix(chunk, Neighbours{})
-	assertHash(t, got[3], fence)
-	assertHash(t, got[4], stone)
-	assertHash(t, chunk[3], stateHash(t, "air", nil))
+	got := fixSection(f, chunk, sectionNeighbours{})
+	assertBlock(t, got[3], fence)
+	assertBlock(t, got[4], stone)
+	assertBlock(t, chunk[3], stateBlock(t, "air", nil))
 }

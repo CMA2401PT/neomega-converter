@@ -31,14 +31,14 @@ func TestStairCorners(t *testing.T) {
 					states := map[string]string{
 						"facing": orientation.facing, "half": half, "shape": "straight",
 					}
-					chunk[cell(8, 8, 8)] = stateHash(t, "oak_stairs", states)
-					chunk[cell(8+corner.distance*orientation.dx, 8, 8+corner.distance*orientation.dz)] = stateHash(t, "stone_stairs", map[string]string{
+					chunk[cell(8, 8, 8)] = stateBlock(t, "oak_stairs", states)
+					chunk[cell(8+corner.distance*orientation.dx, 8, 8+corner.distance*orientation.dz)] = stateBlock(t, "stone_stairs", map[string]string{
 						"facing": corner.otherFacing, "half": half,
 					})
 					states["shape"] = corner.shape
-					got := f.Fix(chunk, Neighbours{})
-					assertHash(t, got[cell(8, 8, 8)], stateHash(t, "oak_stairs", states))
-					if len(f.stairShapes(got, Neighbours{})) != 0 {
+					got := fixSection(f, chunk, sectionNeighbours{})
+					assertBlock(t, got[cell(8, 8, 8)], stateBlock(t, "oak_stairs", states))
+					if len(runPass(f.stairShapes, got, sectionNeighbours{})) != 0 {
 						t.Fatal("unchanged stairs were reported as changes")
 					}
 				})
@@ -64,15 +64,15 @@ func TestStairShapeSelection(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			chunk := airChunk(t)
 			states := map[string]string{"facing": "north", "half": "bottom", "shape": "inner_right"}
-			chunk[cell(8, 8, 8)] = stateHash(t, "oak_stairs", states)
+			chunk[cell(8, 8, 8)] = stateBlock(t, "oak_stairs", states)
 			if test.frontFacing != "" {
-				chunk[cell(8, 8, 7)] = stateHash(t, "oak_stairs", map[string]string{"facing": test.frontFacing, "half": test.frontHalf})
+				chunk[cell(8, 8, 7)] = stateBlock(t, "oak_stairs", map[string]string{"facing": test.frontFacing, "half": test.frontHalf})
 			}
 			if test.backFacing != "" {
-				chunk[cell(8, 8, 9)] = stateHash(t, "oak_stairs", map[string]string{"facing": test.backFacing, "half": test.backHalf})
+				chunk[cell(8, 8, 9)] = stateBlock(t, "oak_stairs", map[string]string{"facing": test.backFacing, "half": test.backHalf})
 			}
 			states["shape"] = test.want
-			assertHash(t, f.Fix(chunk, Neighbours{})[cell(8, 8, 8)], stateHash(t, "oak_stairs", states))
+			assertBlock(t, fixSection(f, chunk, sectionNeighbours{})[cell(8, 8, 8)], stateBlock(t, "oak_stairs", states))
 		})
 	}
 }

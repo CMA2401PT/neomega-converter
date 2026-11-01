@@ -7,7 +7,6 @@ import (
 
 	"neomega-blocks/ir"
 	converts "neomega-blocks/presets/block-converts/v1"
-	java "neomega-blocks/presets/java/v1"
 )
 
 func TestDoorRoundtripRepair(t *testing.T) {
@@ -22,22 +21,22 @@ func TestDoorRoundtripRepair(t *testing.T) {
 					t.Run(strings.Join([]string{name, facing, hinge, open}, "/"), func(t *testing.T) {
 						chunk := airChunk(t)
 						positions := [2]int{cell(4, 7, 9), cell(4, 8, 9)}
-						var original [2]JavaBlockHash
+						var original [2]ir.IRBlock
 						for i, half := range []string{"lower", "upper"} {
-							original[i] = stateHash(t, name, map[string]string{
+							original[i] = stateBlock(t, name, map[string]string{
 								"half": half, "facing": facing, "hinge": hinge, "open": open, "powered": "true",
 							})
-							chunk[positions[i]] = roundtripDoorHash(t, original[i])
+							chunk[positions[i]] = roundtripDoorBlock(t, original[i])
 						}
 						before := slices.Clone(chunk)
-						got := f.Fix(chunk, Neighbours{})
+						got := fixSection(f, chunk, sectionNeighbours{})
 						for i, position := range positions {
 							assertDoorRestored(t, got[position], original[i], before[position])
 						}
 						if !slices.Equal(chunk, before) {
 							t.Fatal("door repair mutated input snapshot")
 						}
-						if len(f.doorHalves(got, Neighbours{})) != 0 {
+						if len(runPass(f.doorHalves, got, sectionNeighbours{})) != 0 {
 							t.Fatal("unchanged doors reported as changes")
 						}
 					})
@@ -54,22 +53,22 @@ func TestDoorAcrossSubchunkBoundary(t *testing.T) {
 	}
 	lower, upper := airChunk(t), airChunk(t)
 	positions := [2]int{cell(4, 15, 9), cell(4, 0, 9)}
-	var original [2]JavaBlockHash
+	var original [2]ir.IRBlock
 	for i, half := range []string{"lower", "upper"} {
-		original[i] = stateHash(t, "spruce_door", map[string]string{
+		original[i] = stateBlock(t, "spruce_door", map[string]string{
 			"half": half, "facing": "east", "hinge": "right", "open": "true", "powered": "true",
 		})
 	}
-	lower[positions[0]], upper[positions[1]] = roundtripDoorHash(t, original[0]), roundtripDoorHash(t, original[1])
+	lower[positions[0]], upper[positions[1]] = roundtripDoorBlock(t, original[0]), roundtripDoorBlock(t, original[1])
 	lowerBefore, upperBefore := slices.Clone(lower), slices.Clone(upper)
-	lowerFixed := f.Fix(lower, Neighbours{3: upper})
-	upperFixed := f.Fix(upper, Neighbours{2: lower})
+	lowerFixed := fixSection(f, lower, sectionNeighbours{3: upper})
+	upperFixed := fixSection(f, upper, sectionNeighbours{2: lower})
 	assertDoorRestored(t, lowerFixed[positions[0]], original[0], lowerBefore[positions[0]])
 	assertDoorRestored(t, upperFixed[positions[1]], original[1], upperBefore[positions[1]])
 	if !slices.Equal(lower, lowerBefore) || !slices.Equal(upper, upperBefore) {
 		t.Fatal("door repair mutated current or neighbor snapshot")
 	}
-	if !slices.Equal(f.Fix(lower, Neighbours{}), lower) || !slices.Equal(f.Fix(upper, Neighbours{}), upper) {
+	if !slices.Equal(fixSection(f, lower, sectionNeighbours{}), lower) || !slices.Equal(fixSection(f, upper, sectionNeighbours{}), upper) {
 		t.Fatal("missing neighbor changed door state")
 	}
 }
@@ -95,11 +94,11 @@ func TestDoorRequiresMatchingPartner(t *testing.T) {
 		} {
 			t.Run(half+"/"+partner.name, func(t *testing.T) {
 				chunk := airChunk(t)
-				chunk[cell(4, 7, 9)] = stateHash(t, "oak_door", map[string]string{
+				chunk[cell(4, 7, 9)] = stateBlock(t, "oak_door", map[string]string{
 					"half": half, "facing": "east", "hinge": "right", "open": "true",
 				})
-				chunk[cell(4, partnerY, 9)] = stateHash(t, partner.name, partner.states)
-				if len(f.doorHalves(chunk, Neighbours{})) != 0 {
+				chunk[cell(4, partnerY, 9)] = stateBlock(t, partner.name, partner.states)
+				if len(runPass(f.doorHalves, chunk, sectionNeighbours{})) != 0 {
 					t.Fatal("mismatched partner changed door state")
 				}
 			})
@@ -115,28 +114,27 @@ func TestDoorKeepsEachHalfPowered(t *testing.T) {
 	chunk := airChunk(t)
 	lower := cell(4, 7, 9)
 	upper := cell(4, 8, 9)
-	chunk[lower] = stateHash(t, "oak_door", map[string]string{
+	chunk[lower] = stateBlock(t, "oak_door", map[string]string{
 		"half": "lower", "facing": "east", "open": "true", "hinge": "left", "powered": "true",
 	})
-	chunk[upper] = stateHash(t, "oak_door", map[string]string{
+	chunk[upper] = stateBlock(t, "oak_door", map[string]string{
 		"half": "upper", "facing": "north", "open": "false", "hinge": "right", "powered": "false",
 	})
 	before := slices.Clone(chunk)
-	changes := f.doorHalves(chunk, Neighbours{})
+	changes := runPass(f.doorHalves, chunk, sectionNeighbours{})
 	if !slices.Equal(chunk, before) || len(changes) != 2 {
 		t.Fatal("door pass must return both changes without modifying its snapshot")
 	}
-	assertHash(t, changes[lower], stateHash(t, "oak_door", map[string]string{
+	assertBlock(t, changes[lower], stateBlock(t, "oak_door", map[string]string{
 		"half": "lower", "facing": "east", "open": "true", "hinge": "right", "powered": "true",
 	}))
-	assertHash(t, changes[upper], stateHash(t, "oak_door", map[string]string{
+	assertBlock(t, changes[upper], stateBlock(t, "oak_door", map[string]string{
 		"half": "upper", "facing": "east", "open": "true", "hinge": "right", "powered": "false",
 	}))
 }
 
-func roundtripDoorHash(t *testing.T, hash JavaBlockHash) JavaBlockHash {
+func roundtripDoorBlock(t *testing.T, block ir.IRBlock) ir.IRBlock {
 	t.Helper()
-	block, _ := java.HashToBlock(hash)
 	bedrock, ok := converts.ConvertFromJava(block)
 	if !ok {
 		t.Fatalf("Java conversion failed: %s", block)
@@ -145,14 +143,14 @@ func roundtripDoorHash(t *testing.T, hash JavaBlockHash) JavaBlockHash {
 	if !ok {
 		t.Fatalf("Bedrock conversion failed: %s", bedrock)
 	}
-	return converted.Tidy().Hash()
+	return converted.Tidy()
 }
 
-func assertDoorRestored(t *testing.T, got, original, input JavaBlockHash) {
+func assertDoorRestored(t *testing.T, got, original, input ir.IRBlock) {
 	t.Helper()
-	want, _ := java.HashToBlock(original)
-	before, _ := java.HashToBlock(input)
+	want := original
+	before := input
 	powered, _ := before.States().Get("powered")
 	states := want.States().Set("powered", powered)
-	assertHash(t, got, ir.IRBlock(want.NameWithNameSpace()+" "+string(states)).Tidy().Hash())
+	assertBlock(t, got, ir.IRBlock(want.NameWithNameSpace()+" "+string(states)).Tidy())
 }
