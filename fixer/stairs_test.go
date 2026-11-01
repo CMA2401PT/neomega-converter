@@ -1,6 +1,10 @@
 package fixer
 
-import "testing"
+import (
+	"testing"
+
+	"neomega-blocks/ir"
+)
 
 func TestStairCorners(t *testing.T) {
 	f, err := New()
@@ -74,5 +78,26 @@ func TestStairShapeSelection(t *testing.T) {
 			states["shape"] = test.want
 			assertBlock(t, fixSection(f, chunk, sectionNeighbours{})[cell(8, 8, 8)], stateBlock(t, "oak_stairs", states))
 		})
+	}
+}
+
+func TestStairUnknownFacing(t *testing.T) {
+	f := &Fixer{}
+	for _, source := range []ir.IRBlock{
+		`minecraft:oak_stairs ["half"="bottom"]`,
+		`minecraft:oak_stairs ["facing"=1,"half"="bottom"]`,
+		`minecraft:oak_stairs ["facing"="up","half"="bottom"]`,
+	} {
+		chunk := airChunk(t)
+		pos := cell(8, 8, 8)
+		chunk[pos] = source.Tidy()
+		if changes := runPass(f.stairShapes, chunk, sectionNeighbours{}); len(changes) != 0 {
+			t.Fatalf("unknown facing was changed: %v", changes)
+		}
+		chunk[pos] = stateBlock(t, "oak_stairs", nil)
+		chunk[cell(8, 8, 7)] = source.Tidy()
+		if changes := runPass(f.stairShapes, chunk, sectionNeighbours{}); len(changes) != 0 {
+			t.Fatalf("unknown facing used as a corner partner: %v", changes)
+		}
 	}
 }

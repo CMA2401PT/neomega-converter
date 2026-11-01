@@ -37,8 +37,12 @@ viewer、Java 存档写出……
 适用：只想转换单个 Bedrock 方块状态，不需要 NBT 或邻居。
 
 ```go
-// 仅转换方块状态
-state, ok := converts.ConvertToJava(bedrockBlock.State)
+// 仅转换方块状态：先对齐到目标 Bedrock 版本，再转 Java
+nemc, ok := converts.ConvertFromBedrock(bedrockBlock.State.Tidy())
+state := ir.IRBlock("minecraft:air []")
+if ok {
+    state, ok = converts.ConvertToJava(nemc)
+}
 if !ok {
     state = ir.IRBlock("minecraft:air []")
 }
@@ -70,17 +74,19 @@ converted, err := bedrock.ConvertChunk(src)
 
 适用：只想对一个格子应用方块实体规则，不走完整区块流程。
 
+按 id 选规则的注册表在 `bedrock` 包内部，没有导出。调用方自己按 ID 选子包：
+
 ```go
-result, ok, err := blockentities.Apply(entityID, blockentities.Input{
-    Base:     javaState,
+result, err := bed.Convert(blockentities.Input{
+    Base:     javaState, // 已转换的 Java 状态
     Source:   nbtCompound,
     LocalPos: [3]uint8{x, y, z},
     WorldPos: celler.BlockPos{X: wx, Y: wy, Z: wz},
 })
 ```
 
-`ok=false` 表示没有该 ID 的规则（不是错误）。
 `err!=nil` 表示规则执行失败，调用方保留 Base 状态。
+各规则的报错条件和降级见 [README 的能力一览](README.md#能力一览)。
 
 ---
 
@@ -94,8 +100,8 @@ javaItem := items.ConvertItem(bedrockItemCompound)
 // nil 表示无法完整转换，调用方跳过该条目
 ```
 
-支持：方块物品（通过 ConvertToJava 查表）、药水/药水箭（potionIDs 编号表）、
-书本（written_book/writable_book）、附魔、耐久。
+支持：方块物品（Block compound、legacy data value 或名称转出 Java 方块）、药水/药水箭（potionIDs 编号表）、
+书本（written_book/writable_book）、附魔。
 
 不支持：工具/武器/盔甲/食物（需要 Bedrock→Java 物品名映射表，见 `bedrock/items/doc.go`）、嵌套容器。
 
@@ -122,7 +128,7 @@ fixed := f.FixSection(section, [6]*layer_storage.Palette[ir.IRBlock]{
 })
 ```
 
-已实现的 pass（按执行顺序）：
+已实现的 pass（按执行顺序；各自的降级见 README 的能力一览）：
 1. connections：栅栏、玻璃板、铁栏杆连接
 2. fireConnections：火的附着方向
 3. stairShapes：楼梯拐角
@@ -140,7 +146,7 @@ fixed := f.FixSection(section, [6]*layer_storage.Palette[ir.IRBlock]{
 
 **只转单个方块（不需要 NBT 和邻居）**：
 ```
-state = ConvertToJava(bedrockState)
+state = ConvertToJava(ConvertFromBedrock(bedrockState))
 ```
 
 **转单个 section，含 NBT，不修复邻接**：
@@ -216,15 +222,47 @@ mcconv 在 `translate/tables.go` 用 GeyserMC/mappings 和 pmmp/BedrockData 生�
 
 ---
 
-### 3.4 普通实体（生物、展示框等）
+### 3.4 展示框：方块和里面的物品一起消失，且没有诊断
+
+**现状**：存档里的展示框转换后什么都不剩，`Diagnostics` 里也看不到。
+
+两版的表示不同。
+Bedrock 的展示框是方块 `minecraft:frame` / `minecraft:glow_frame`，朝向在方块状态的 `facing_direction` 里，
+物品、物品旋转和掉落概率在方块实体 `ItemFrame` / `GlowItemFrame` 里。
+Java 的展示框不是方块，是实体 `minecraft:item_frame` / `minecraft:glow_item_frame`，
+存放在 `entities/` 目录的 region 里，所在格子是空气。
+
+当前的转换在两层都丢掉了它：
+
+- 方块层：neomega-blocks 的转出表把 `frame` / `glow_frame` 映射成空气。Java 没有对应方块，这个映射本身是对的，所以不计入 `unknown_block`。
+- 方块实体层：`ItemFrame` / `GlowItemFrame` 没有注册规则，整条忽略。没有规则的方块实体不产生诊断。
+
+所以展示框本身、框里的物品（包括地图）都会消失。
+
+**为什么不能在方块层修**：Java 没有展示框方块，必须在阶段 1 产出 Java 实体。
+现有的方块实体规则只能返回方块状态和方块实体，`ConvertedChunk` 也没有实体字段，需要先追加实体输出。
+
+**接入时要注意**：
+
+- 朝向要从 Bedrock 源状态读。规则拿到的 `Base` 是转换后的 Java 状态，已经是空气，`facing_direction` 不在里面。
+- 字段对应（参照 mcconv `internal/convert/entities.go` 的 frames 部分）：
+  - `facing_direction` 0..5 与 Java `Facing` 编号相同（下、上、北、南、西、东）。
+  - `Pos` 是方块中心沿朝向反方向偏移 0.46875，另写 `block_pos` 为方块坐标。
+  - `Item` 用 `items.ConvertItem` 转换，去掉 `Slot`。物品转不出时保留空展示框。
+  - `ItemRotation` 是角度（Float），除以 45 取整到 0..7 写成 Byte；`ItemDropChance` 原样保留，缺省为 1。
+  - `UUID` 由方块坐标确定性生成，重复导出得到相同的实体。
+- Java 实体写进 `entities/` region，块的外层是 `{DataVersion, Position: [x, z], Entities: [...]}`，与方块所在的 `region/` 分开。
+
+**留位**：实体输出与普通实体（3.5）共用；展示框不依赖 celler 读取 actor 记录，数据全在方块和方块实体里，可以先于普通实体接入。
+
+---
+
+### 3.5 普通实体（生物、盔甲架等）
 
 **现状**：celler/bedrock 只有 `TagEntities` 常量，没有读取接口。
 
 **卡在哪**：两个层面都缺失。一是 celler 没有暴露读 actor/digp 记录的 API；
-二是实体字段的语义转换本身复杂（生物、展示框、盔甲架的格式差异很大）。
-
-展示框特别值得注意：Bedrock 是带 block entity 的方块，Java 是普通实体，
-转换时需要从方块层挪到实体层，不是简单的字段改名。
+二是实体字段的语义转换本身复杂（生物、盔甲架的格式差异很大）。
 
 **mcconv 的做法**：`convert/entities.go` 单独处理普通实体，
 从 bedrock/world.go 的 actor/digp 记录读取，写入独立的 Java entities region。
@@ -233,7 +271,7 @@ mcconv 在 `translate/tables.go` 用 GeyserMC/mappings 和 pmmp/BedrockData 生�
 
 ---
 
-### 3.5 整图导出命令
+### 3.6 整图导出命令
 
 **现状**：`cmd/bedrock-to-java/main.go` 只有 package 声明，是留位。
 

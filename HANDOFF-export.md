@@ -1,160 +1,120 @@
-# neomega-converter 下一步：整图导出基础实现
+# neomega-converter 下一步：导出能力
 
-这份文档给下一个接手「整图导出」的会话用。读完它，按「实施步骤」从第 1 步开始。
+这份文档给下一个接手「导出到 Java 存档」的会话用。
 工作方式沿用 codex-collab skill：出简报给 Sol，验收自己跑。
 
-## 已完成的状态（2026-11-01）
-
-转换能力见 `CONVERSION-GUIDE.md`，这里只列与导出直接相关的部分：
-
-- `bedrock.ConvertChunk`：`*cellerbedrock.Chunk` → `*converter.ConvertedChunk`，含方块实体。
-- `fixer.Fix`：区块级邻接修复，`ChunkNeighbours [8]*ConvertedChunk`。
-- celler/bedrock：`World.ScanChunks` 顺序扫描快照，`ReadChunk` 随机读取。
-- celler/java：`NewChunk`、`SetSection`、`WriteChunk`、`WriteLevel`，region 格式已就绪。
-- 留位：`cmd/bedrock-to-java/main.go`（只有 package main）。
-
-还没实现（这一轮留位，不强求）：生物群系、普通实体、展示框、旗帜图案。
+先读 [README 的「能力一览」](README.md#能力一览)。
+那一节列出了现有转换能力的签名、支持范围、报错条件和降级情况，这里不再重复。
 
 ## 目标
 
-这一轮先做**不追求速度和并发的基础实现**，以验证转换正确性为主。
-先让单格、单子区块、整图都跑通，再考虑并行和性能优化。
+导出这一侧也要提供多种粒度、可以单独使用的能力，命令行只是把它们串起来的一个调用方。
+不要把读世界、转换、修复、写出合成一个大入口，让调用方只能整图跑。
+每一层都应能单独调用和测试，例如只把一根 `ConvertedChunk` 变成 `java.Chunk`，或只转换 `level.dat`。
 
-fixer 可能很慢（每根柱子要读 8 个邻居），因此包装代码把它作为独立选项：
-可以跑「只转换」（快，邻接状态近似），也可以跑「转换 + 修复」（慢，邻接状态精确）。
+这一轮先做不追求速度和并发的基础实现，以验证转换正确性为主。
+fixer 可能很慢（每根柱子要读 8 个邻居），因此修复是调用方可选的一步：
+可以只转换（快，邻接状态近似），也可以转换后修复（慢，邻接状态精确）。
 
-## 设计决策
+## 已完成的状态（2026-11-01）
 
-### 核心转换 vs 包装代码的边界
+- `bedrock.ConvertChunk`：`*cellerbedrock.Chunk` → `*converter.ConvertedChunk`，含方块实体。
+- `fixer.Fix`：区块级邻接修复，`ChunkNeighbours [8]*ConvertedChunk`。
+- celler/bedrock：`World.ScanChunks` 顺序扫描快照，`ReadChunk` 随机读取，`ReadLevel` 读 `level.dat`。
+- celler/java：`NewChunk`、`SetSection`、`WriteChunk`、`WriteLevel`，region 格式已就绪。
+- 留位：`cmd/bedrock-to-java/main.go`（只有 package main），`adapt.OnDemandConverter`（空类型）。
 
-neomega-converter 的核心能力（`bedrock.ConvertChunk`、`fixer.Fix`）已经分离。
-`cmd/bedrock-to-java` 是包装层，负责：
-- 读 Bedrock world，遍历区块
-- 决定是否启用 fixer，以及缓存策略
-- 构造 Java Chunk，写出 region
-- 转换 level.dat
+还没实现：生物群系、普通实体、展示框、旗帜图案。
+展示框目前整体消失且没有诊断，原因和接入方式见 CONVERSION-GUIDE 3.4。
 
-核心能力本身不依赖「是否导出整图」的决策，不改动 converter.go / bedrock/ / fixer/。
+## 边界
 
-### 包装层的调用模式
+核心能力（`converter.go`、`bedrock/`、`fixer/`）不依赖「是否导出整图」的决策。
+导出能力放在 `adapt/`，命令行放在 `cmd/bedrock-to-java/`。
+不改动 `bedrock/`、`fixer/`、`converter.go` 的公开接口；需要新增诊断种类时只做追加。
 
-三种粒度，都通过核心能力组合：
+## 建议的导出能力
 
-**单格**（调试/验证用）：
-```go
-state, _ := converts.ConvertToJava(bedrockState)
-// 不走 ConvertChunk，直接用 block-converts 的 ConvertToJava
+下面是建议的形状，不是定稿，实现时可以调整命名。
+要保持的是：每一项输入输出明确，能单独调用，报错和降级写进 README 的能力一览。
+
+```text
+adapt.ToJavaSection(y, *ConvertedSection, opts) → (*java.Section, err)
+  Blocks 直接用；Biomes 为 nil 时不写
+  需要决定 waterlogged 的处理（见下文「写出时要处理的事」）
+
+adapt.ToJavaChunk(*ConvertedChunk, dataVersion, opts) → (*java.Chunk, err)
+  对每个 section 调 ToJavaSection，再 SetSection
+  BlockEntities 写成 NBT 的 block_entities 列表（java.Chunk 没有写方块实体的方法）
+  写 Status 等让游戏把它当作已完成区块的字段
+
+adapt.JavaDimension(bedrockDim int32) → (java.Dimension, ok)
+  0 → Overworld，1 → Nether，2 → End，其它 ok=false
+
+adapt.ConvertLevel(cellerbedrock.Level, dataVersion) → (nbt.Document, err)
+  Level 只有 Version 和 NBT 两个字段，名称和出生点要从 NBT 里取
+  LevelName → Data.LevelName；SpawnX/Y/Z → Data.SpawnX/Y/Z
+  其余字段写 Java 默认值；字段缺失或类型不对时的行为要写进能力一览
+
+邻居查找（可选的小工具，不是必需）：
+  adapt.Neighbours(lookup func(dim, pos) *ConvertedChunk, dim, pos) → fixer.ChunkNeighbours
 ```
 
-**单子区块**（viewer/调试）：
-```go
-// 构造只含一个 section 的临时 Chunk
-chunk := cellerbedrock.NewChunk(pos, dim)
-// 把 section 数据填进去（或用 ScanChunks 取到的真实 Chunk 截一个 section）
-converted, _ := bedrock.ConvertChunk(chunk)
-section := converted.Sections[sectionY]
-// 可选：fixed := fixer.Fix(converted, fixer.ChunkNeighbours{})
+命令行把这些串起来：
+
+```text
+cmd/bedrock-to-java -input <bedrock 世界> -output <java 世界> [-dim 0] [-fix]
+  1. cellerbedrock.Open(input, ReadOnly)；java.OpenDirectory(output)
+  2. ReadLevel → ConvertLevel → WriteLevel
+  3. ScanChunks，只保留目标维度，ConvertChunk 存入 stage1
+  4. 每个 pos：out = fix ? Fix(stage1[pos], Neighbours(stage1)) : stage1[pos]
+  5. ToJavaChunk(out) → WriteChunk；最后 Commit / Close
+  6. 打印统计：区块数、ConvertChunk 失败数、各诊断种类的合计、未知状态前 N 个
 ```
 
-**整图**：
-```go
-world.ScanChunks(func(c *cellerbedrock.Chunk) error {
-    stage1[c.Pos] = bedrock.ConvertChunk(c)
-    return nil
-})
-// fixer 可选，加一轮扫描
-for pos, converted := range stage1 {
-    neighbours := lookup8(stage1, pos)
-    fixed := fixer.Fix(converted, neighbours)
-    writeJavaChunk(fixed)
-}
-```
+基础实现不做流式、并行、进度条和增量导出。
 
-### fixer 作为独立选项
+## 写出时要处理的事
 
-包装代码暴露一个 bool 或 flag `--fix`：
-- false（默认）：只跑 ConvertChunk，直接写出。速度快，邻接状态不精确。
-- true：先全量 ConvertChunk 存内存，再全量 Fix 写出。内存多，结果精确。
+这些是整理能力一览时从代码里确认的，写出层必须做决定。
 
-基础实现不做流式：先全量阶段 1，再全量阶段 2。
-并行版本留到验证正确性之后。
+- **waterlogged**：阶段 1 会把它附加到任何第二层是水的格子上，包括石头和空气。
+  它是本仓库 IR 的扩展属性，`java.BlockProperties` 的属性表里没有它，连 `oak_slab` 也没有。
+  Java 原版只有部分方块能含水，写出时需要一份「哪些方块可含水」的数据，目前仓库里没有。
+  可选做法：找到或生成这份数据后，可含水的保留、其余去掉（空气含水可写成 `water`）；
+  或者先全部去掉，把丢失含水记成降级。选哪种要写进能力一览。
+- **Status 和其它区块字段**：`java.NewChunk` 只写 `xPos`、`zPos`、`DataVersion`、`sections`。
+  缺少 `Status`（应为 `minecraft:full`）的区块可能被游戏当作未完成区块重新生成。
+  高度图、光照是否需要写，要用实际游戏加载验证。
+- **方块实体**：`ConvertedChunk.BlockEntities` 是 `[]java.BlockEntity`，NBT 里已带 `id` 和世界坐标 `x/y/z`。
+  `java.Chunk` 只有读方块实体的方法，写出层需要自己写 `block_entities` 列表。
+- **ConvertChunk 返回 err**：整根柱子没有输出，例如展平前的旧调色板。
+  整图时建议跳过并计数，另给一个严格模式在第一个错误处停下。
+- **没有诊断的丢失**：没有注册规则的方块实体（熔炉、木桶、漏斗等）整条被忽略，`Diagnostics` 里看不到。
+  如果希望导出统计里能看到，可在包装层自己统计源实体 id，或在 `converter.go` 追加一个诊断种类。
+  后者改动核心包，先和用户确认。
+- **维度**：`ScanChunks` 给出所有维度。只导出 `-dim` 指定的维度，用 `JavaDimension` 选目录。
+- **DataVersion**：目标 Java 1.21.4，DataVersion 4189，与 block-converts 的 `JavaTargetVersion` 一致。
 
-## 实施步骤
+## 验收标准
 
-### 第 1 步：Java Chunk 适配层
-
-把 `ConvertedChunk` 转成 celler 的 `*java.Chunk`，供写出使用。
-
-需要实现：
-```go
-// 在 cmd/bedrock-to-java/ 或新建 adapt/ 子包里
-func ToJavaChunk(c *converter.ConvertedChunk, dataVersion int32) (*java.Chunk, error)
-```
-
-逻辑：
-- 调 `java.NewChunk(c.Pos, dataVersion)`。
-- 对每个 `ConvertedSection`，构造 `java.Section`：
-  - `Blocks`：`Palette[ir.IRBlock]` 直接用（java.Section 的 Blocks 就是这个类型）。
-  - `Biomes`：nil（留位）。
-- 调 `chunk.SetSection(section)`。
-- 方块实体：`ConvertedChunk.BlockEntities` 是 `[]java.BlockEntity`，调 `chunk` 对应的写入方法（先读 java/chunk.go 确认接口）。
-
-验收：`./check.sh neomega-converter`（如果放在 converter 里）或独立编译通过。
-
-### 第 2 步：level.dat 转换
-
-把 Bedrock 的 `level.dat`（celler/bedrock 的 `World.ReadLevel` 返回 `Level` struct）转成 Java 的 level.dat NBT。
-
-需要的字段（只转这几个，其余用 Java 默认值）：
-- 世界名称：`Level.LevelName` → `Data.LevelName`
-- 出生点：`Level.SpawnX/Y/Z` → `Data.SpawnX/Y/Z`
-- DataVersion：写死目标版本（Java 1.21.4 = 4189）
-- Version：`{Id: 4189, Name: "1.21.4", Series: "main", Snapshot: 0}`
-
-其余字段（游戏规则、难度、时间等）暂时写 Java 默认值，不从 Bedrock 读。
-先读 `celler/java/world.go` 的 `WriteLevel` 签名确认输入类型。
-
-### 第 3 步：cmd/bedrock-to-java/main.go
-
-完整命令行入口。flag：
-- `-input <path>`：Bedrock 世界目录
-- `-output <path>`：Java 世界目录（自动创建）
-- `-dim <int>`：维度（默认 0，主世界）
-- `-fix`：启用 fixer（默认关）
-
-流程：
-```
-1. 打开 Bedrock world（ReadOnly）
-2. 创建 Java world（OpenDirectory）
-3. 读 level.dat → 转换 → 写 Java level.dat
-4. ScanChunks → ConvertChunk → 存 stage1 map
-5. 如果 --fix：遍历 stage1，Fix，存 stage2 map；否则 stage2 = stage1
-6. 遍历 stage2 → ToJavaChunk → WriteChunk
-7. 打印统计：区块数、诊断汇总（unknown_block 总数、nbt_error 数）
-```
-
-不写进度条，不并行，不做增量导出。
-
-### 验收标准
-
-1. `./check.sh neomega-converter`（如果有新包）全通过。
-2. 对 `resource/基岩版` 跑命令，输出目录能被 Java celler 读回（`java.World.ReadChunk` 不报错）。
-3. 读回几个区块，section 里的方块状态能用 `java.HashToBlock` 查到。
-4. 开 `--fix` 和不开，两种都能跑完不 panic。
+1. `./check.sh neomega-converter` 全通过；新增的每个导出能力有单独的测试。
+2. 对 `resource/基岩版` 的副本跑命令，输出目录能被 `java.World.ReadChunk` 读回。
+3. 读回几个区块，section 里的方块状态能用 `java.HashToBlock` 查到；方块实体能用 `Chunk.BlockEntities` 读回。
+4. 开 `-fix` 和不开都能跑完，不 panic。
+5. 新增能力的报错和降级补进 README 的能力一览。
 
 ## 参考
 
 - `分析mcconv/06-区块与存档存储/README.md`：celler 的 region 格式细节。
 - `分析mcconv/08-实现路线/README.md`：mcconv 的整体流程。
-- `celler/bedrock/world.go`：`ScanChunks`、`ReadLevel`。
-- `celler/java/world.go`：`WriteChunk`、`WriteLevel`、`Flush`。
-- `celler/java/chunk.go`：`NewChunk`、`SetSection`、`Section` 类型。
+- `celler/bedrock/world.go`：`ScanChunks`、`ReadLevel`、`Level`。
+- `celler/java/world.go`：`WriteChunk`、`WriteLevel`、`Commit`、`Close`。
+- `celler/java/chunk.go`：`NewChunk`、`SetSection`、`Section`、`BlockEntities`。
 
 ## 给新会话的提醒
 
 - Sol 简报要转述 codex-collab 的代码和文档规范。
-- 改动主要在 `cmd/bedrock-to-java/`，如果需要 adapt 层，放在 `adapt/` 里。
-  不改动 `bedrock/`、`fixer/`、`converter.go` 的公开接口。
 - celler 已在 go.mod 里有 require/replace，不需要再加。
-- Java DataVersion 目标版本是 4189（Java 1.21.4），和 neomega-viewer 用的版本保持一致。
+- LevelDB 打开时可能写文件，跑真实存档前先复制 `resource/基岩版`。
 - 这份文件是交接用的临时文件，完成验收后删除它。

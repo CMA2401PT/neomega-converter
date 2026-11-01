@@ -20,6 +20,11 @@ func TestConvert(t *testing.T) {
 			want: `minecraft:potted_dead_bush []`,
 		},
 		{
+			name: "legacy sapling variant",
+			snbt: `{id:"FlowerPot",PlantBlock:{name:"minecraft:sapling",states:{sapling_type:"spruce",age_bit:0b},version:18168865}}`,
+			want: `minecraft:potted_spruce_sapling []`,
+		},
+		{
 			name: "no Java potted block",
 			snbt: `{id:"FlowerPot",PlantBlock:{name:"minecraft:stone",states:{},version:18168865}}`,
 			want: `minecraft:flower_pot []`,

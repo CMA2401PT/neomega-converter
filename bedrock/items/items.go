@@ -5,6 +5,7 @@ import (
 
 	"neomega-blocks/ir"
 	converts "neomega-blocks/presets/block-converts/v1"
+	"neomega-converter/bedrock/internal/blockstate"
 	"neomega-converter/bedrock/internal/textcomponent"
 	nbt "neomega-nbt/presets/v1"
 )
@@ -45,7 +46,7 @@ func ConvertItem(src nbt.Compound) nbt.Compound {
 	aux, _ := number(src["Damage"])
 	shortName := strings.TrimPrefix(name, "minecraft:")
 	var javaID string
-	if block, ok := converts.ConvertToJava(ir.IRBlock(name + " []").Tidy()); ok {
+	if block, ok := itemBlock(src, name, aux); ok {
 		javaID = block.NameWithNameSpace()
 	} else {
 		switch shortName {
@@ -72,14 +73,6 @@ func ConvertItem(src nbt.Compound) nbt.Compound {
 			return nil
 		}
 		comps["minecraft:potion_contents"] = nbt.Compound{"potion": "minecraft:" + potionIDs[index]}
-	default:
-		damage := aux
-		if value, ok := number(tag["Damage"]); ok {
-			damage = value
-		}
-		if damage > 0 {
-			comps["minecraft:damage"] = damage
-		}
 	}
 
 	if raw, exists := tag["ench"]; exists {
@@ -118,6 +111,28 @@ func ConvertItem(src nbt.Compound) nbt.Compound {
 	return out
 }
 
+func itemBlock(src nbt.Compound, name string, aux int32) (ir.IRBlock, bool) {
+	// Block 保存了明确的变体；缺少它时才解释 aux，最后用名称补齐默认状态。
+	block, _ := src["Block"].(nbt.Compound)
+	blockName, nameOK := block["name"].(string)
+	states, statesOK := block["states"].(nbt.Compound)
+	var source ir.IRBlock
+	var ok bool
+	if nameOK && statesOK {
+		var err error
+		source, err = ir.NewIRBlockFromGo(blockName, states)
+		ok = err == nil
+	} else {
+		source, ok = converts.BedrockDataValueToBlock(name, uint32(aux))
+	}
+	if ok {
+		if converted, ok := blockstate.ToJava(source); ok {
+			return converted, true
+		}
+	}
+	return blockstate.ToJava(ir.IRBlock(name + " []"))
+}
+
 func bookContent(tag nbt.Compound, written bool) nbt.Compound {
 	pages := []nbt.Compound{}
 	if raw, exists := tag["pages"]; exists {
@@ -150,7 +165,7 @@ func bookContent(tag nbt.Compound, written bool) nbt.Compound {
 }
 
 func number(value any) (int32, bool) {
-	// Bedrock 的辅助值和耐久使用不同整数宽度。
+	// Bedrock 的辅助值和书本代数使用不同整数宽度。
 	switch value := value.(type) {
 	case int16:
 		return int32(value), true

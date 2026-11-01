@@ -28,8 +28,13 @@ func (f *Fixer) stairShapes(view snapshot) map[position]ir.IRBlock {
 		}
 		states := block.States()
 		facing, _ := states.Get("facing")
+		facingName, ok := facing.(string)
+		direction, known := stairDirections[facingName]
+		if !ok || !known {
+			continue
+		}
 		half, _ := states.Get("half")
-		shape := stairShape(view.get, pos, stairDirections[facing.(string)], half)
+		shape := stairShape(view.get, pos, direction, half)
 		states = states.Set("shape", shape)
 		updated := ir.IRBlock(block.NameWithNameSpace() + " " + string(states)).Tidy()
 		if updated != block {
@@ -59,7 +64,11 @@ func stairShape(get blockGetter, pos position, facing stairDirection, half any) 
 			continue
 		}
 		otherFacing, _ := other.States().Get("facing")
-		direction := stairDirections[otherFacing.(string)]
+		facingName, ok := otherFacing.(string)
+		direction, known := stairDirections[facingName]
+		if !ok || !known {
+			continue
+		}
 		if direction.x == facing.z && direction.z == -facing.x {
 			return candidate.left
 		}

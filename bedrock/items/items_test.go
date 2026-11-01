@@ -3,6 +3,7 @@ package items
 import (
 	"testing"
 
+	"neomega-blocks/ir"
 	nbt "neomega-nbt/presets/v1"
 )
 
@@ -18,23 +19,49 @@ func TestConvertItem(t *testing.T) {
 			want: `{id:"minecraft:oak_log",count:12,Slot:3b}`,
 		},
 		{
-			name: "damage and enchantments",
+			name: "block aux and tag damage ignored with enchantments",
 			src:  `{Name:"minecraft:oak_log",Count:1b,Damage:9s,tag:{Damage:4,ench:[{id:17s,lvl:3s},{id:40s,lvl:2s}]}}`,
-			want: `{id:"minecraft:oak_log",count:1,components:{"minecraft:damage":4,"minecraft:enchantments":{levels:{"minecraft:unbreaking":3,"minecraft:breach":2}}}}`,
+			want: `{id:"minecraft:oak_log",count:1,components:{"minecraft:enchantments":{levels:{"minecraft:unbreaking":3,"minecraft:breach":2}}}}`,
 		},
 		{
-			name: "top level short damage",
+			name: "block aux is not damage",
 			src:  `{Name:"minecraft:oak_log",Count:1b,Damage:7s}`,
-			want: `{id:"minecraft:oak_log",count:1,components:{"minecraft:damage":7}}`,
+			want: `{id:"minecraft:oak_log",count:1}`,
 		},
 		{
-			name: "tag short damage",
+			name: "block ignores tag short damage",
 			src:  `{Name:"minecraft:oak_log",Count:1b,Damage:7,tag:{Damage:2s}}`,
-			want: `{id:"minecraft:oak_log",count:1,components:{"minecraft:damage":2}}`,
+			want: `{id:"minecraft:oak_log",count:1}`,
 		},
 		{
-			name: "zero tag damage overrides aux",
+			name: "block ignores zero tag damage",
 			src:  `{Name:"minecraft:oak_log",Count:1b,Damage:7s,tag:{Damage:0}}`,
+			want: `{id:"minecraft:oak_log",count:1}`,
+		},
+		{
+			// 当前表未命中 wool=14、log=2，按名称回退得到默认变体。
+			name: "legacy wool aux falls back to name",
+			src:  `{Name:"minecraft:wool",Count:1b,Damage:14s}`,
+			want: `{id:"minecraft:white_wool",count:1}`,
+		},
+		{
+			name: "legacy log aux falls back to name",
+			src:  `{Name:"minecraft:log",Count:1b,Damage:2s}`,
+			want: `{id:"minecraft:oak_log",count:1}`,
+		},
+		{
+			name: "Block takes priority over name and aux",
+			src:  `{Name:"minecraft:wool",Count:1b,Damage:11s,Block:{name:"minecraft:red_wool",states:{},version:18168865}}`,
+			want: `{id:"minecraft:red_wool",count:1}`,
+		},
+		{
+			name: "Block legacy states",
+			src:  `{Name:"minecraft:planks",Count:1b,Block:{name:"minecraft:planks",states:{wood_type:"spruce"},version:18168865}}`,
+			want: `{id:"minecraft:spruce_planks",count:1}`,
+		},
+		{
+			name: "invalid aux falls back to name",
+			src:  `{Name:"minecraft:oak_log",Count:1b,Damage:32767s}`,
 			want: `{id:"minecraft:oak_log",count:1}`,
 		},
 		{
@@ -112,6 +139,15 @@ func TestConvertItem(t *testing.T) {
 				t.Fatalf("got %#v, want %#v", decoded.Value, want)
 			}
 		})
+	}
+}
+
+func TestItemBlockAuxState(t *testing.T) {
+	// 物品 ID 不体现原木朝向，直接检查状态以区分 aux 转换与名称回退。
+	got, ok := itemBlock(nbt.Compound{}, "minecraft:birch_log", 2)
+	want := ir.IRBlock(`minecraft:birch_log ["axis"="z"]`).Tidy()
+	if !ok || got != want {
+		t.Fatalf("got %s (%t), want %s", got, ok, want)
 	}
 }
 

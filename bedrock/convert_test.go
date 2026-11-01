@@ -143,6 +143,30 @@ func TestChestAndSignEntities(t *testing.T) {
 	}
 }
 
+func TestLegacyBlockStates(t *testing.T) {
+	// 旧状态需先对齐目标 Bedrock 表，成功转换的格子不能计入 unknown_block。
+	tests := []struct {
+		source ir.IRBlock
+		want   ir.IRBlock
+	}{
+		{`minecraft:wool ["color"="red"]`, `minecraft:red_wool []`},
+		{`minecraft:skull ["facing_direction"=1]`, `minecraft:skeleton_skull ["powered"="false","rotation"="0"]`},
+		{`minecraft:shulker_box ["color"="red"]`, `minecraft:red_shulker_box ["facing"="up"]`},
+		{`minecraft:planks ["wood_type"="spruce"]`, `minecraft:spruce_planks []`},
+	}
+	layers := [][]ir.IRBlock{airLayer()}
+	for index, test := range tests {
+		layers[0][index] = test.source
+	}
+	converted := convertFixture(t, layers, nil, 0)
+	for index, test := range tests {
+		assertBlock(t, converted.Sections[0].Blocks.Get(layer_storage.At(0, index, 0)), test.want)
+	}
+	if len(converted.Diagnostics) != 0 {
+		t.Fatalf("unexpected diagnostics: %+v", converted.Diagnostics)
+	}
+}
+
 func airLayer() []ir.IRBlock {
 	layer := make([]ir.IRBlock, 4096)
 	for index := range layer {

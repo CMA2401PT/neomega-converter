@@ -6,6 +6,7 @@ import (
 	"celler/layer_storage"
 	"neomega-blocks/geometry/solidtable"
 	"neomega-blocks/ir"
+	converts "neomega-blocks/presets/block-converts/v1"
 	java "neomega-blocks/presets/java/v1"
 	javasolid "neomega-blocks/presets/java/v1/solidtable"
 	"neomega-converter"
@@ -87,8 +88,9 @@ func (f *Fixer) Fix(center *converter.ConvertedChunk, neighbours ChunkNeighbours
 	sections := make(map[int32]*layer_storage.Palette[ir.IRBlock], len(center.Sections))
 	grid := make(map[sectionKey]*layer_storage.Palette[ir.IRBlock])
 	for y, section := range center.Sections {
-		sections[y] = section.Blocks
-		grid[sectionKey{y: int(y)}] = section.Blocks
+		blocks := completePalette(section.Blocks)
+		sections[y] = blocks
+		grid[sectionKey{y: int(y)}] = blocks
 	}
 	for side, chunk := range neighbours {
 		if chunk == nil {
@@ -96,7 +98,7 @@ func (f *Fixer) Fix(center *converter.ConvertedChunk, neighbours ChunkNeighbours
 		}
 		offset := chunkOffsets[side]
 		for y, section := range chunk.Sections {
-			grid[sectionKey{x: offset[0], y: int(y), z: offset[1]}] = section.Blocks
+			grid[sectionKey{x: offset[0], y: int(y), z: offset[1]}] = completePalette(section.Blocks)
 		}
 	}
 	f.run(sections, grid)
@@ -117,13 +119,44 @@ func (f *Fixer) FixSection(
 	neighbours [6]*layer_storage.Palette[ir.IRBlock],
 ) *layer_storage.Palette[ir.IRBlock] {
 	// 单 section 预览使用局部高度，六面邻居按 west/east/down/up/north/south 排列。
+	section = completePalette(section)
 	sections := map[int32]*layer_storage.Palette[ir.IRBlock]{0: section}
 	grid := map[sectionKey]*layer_storage.Palette[ir.IRBlock]{{}: section}
 	for side, blocks := range neighbours {
-		grid[sectionKey(sideOffset(side))] = blocks
+		if blocks != nil {
+			grid[sectionKey(sideOffset(side))] = completePalette(blocks)
+		}
 	}
 	f.run(sections, grid)
 	return sections[0]
+}
+
+func completePalette(blocks *layer_storage.Palette[ir.IRBlock]) *layer_storage.Palette[ir.IRBlock] {
+	// 仅在补全确实改变状态时复制，完整调色板可继续与调用方共享。
+	for _, block := range blocks.Palette[:blocks.LastPaletteIdx+1] {
+		if completeBlock(block) != block {
+			return layer_storage.ConvertPalette(blocks, completeBlock)
+		}
+	}
+	return blocks
+}
+
+func completeBlock(block ir.IRBlock) ir.IRBlock {
+	// 默认属性表不保留通用含水标记，补全时需单独传递原值。
+	if _, ok := java.HashToBlock(java.BlockToHash(block)); ok {
+		return block
+	}
+	states := block.States()
+	waterlogged, wet := states.Get("waterlogged")
+	source := ir.IRBlock(block.NameWithNameSpace() + " " + string(states.Delete("waterlogged")))
+	completed, ok := converts.JavaCanon(source)
+	if !ok {
+		return block
+	}
+	if wet {
+		completed = ir.IRBlock(completed.NameWithNameSpace() + " " + string(completed.States().Set("waterlogged", waterlogged)))
+	}
+	return completed.Tidy()
 }
 
 func (f *Fixer) run(

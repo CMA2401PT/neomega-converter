@@ -9,7 +9,6 @@ import (
 	"celler/java"
 	"celler/layer_storage"
 	"neomega-blocks/ir"
-	converts "neomega-blocks/presets/block-converts/v1"
 	"neomega-converter"
 	"neomega-converter/bedrock/blockentities"
 	"neomega-converter/bedrock/blockentities/banner"
@@ -22,6 +21,7 @@ import (
 	"neomega-converter/bedrock/blockentities/shulker_box"
 	"neomega-converter/bedrock/blockentities/sign"
 	"neomega-converter/bedrock/blockentities/skull"
+	"neomega-converter/bedrock/internal/blockstate"
 )
 
 var entityRules = map[string]blockentities.ConvertFunc{
@@ -59,10 +59,8 @@ func ConvertChunk(src *cellerbedrock.Chunk) (*converter.ConvertedChunk, error) {
 		if cached, exists := cache[source]; exists {
 			return cached.state
 		}
-		state, ok := converts.ConvertToJava(source.State)
-		if ok {
-			state = state.Tidy()
-		} else {
+		state, ok := blockstate.ToJava(source.State)
+		if !ok {
 			state = air
 		}
 		cache[source] = blockResult{state: state, ok: ok}

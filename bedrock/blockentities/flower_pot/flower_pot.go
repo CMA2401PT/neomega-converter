@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	"neomega-blocks/ir"
-	converts "neomega-blocks/presets/block-converts/v1"
 	java "neomega-blocks/presets/java/v1"
 	"neomega-converter/bedrock/blockentities"
+	"neomega-converter/bedrock/internal/blockstate"
 	nbt "neomega-nbt/presets/v1"
 )
 
@@ -38,7 +38,7 @@ func Convert(input blockentities.Input) (blockentities.Result, error) {
 	if err != nil {
 		return blockentities.Result{}, err
 	}
-	converted, ok := converts.ConvertToJava(source.Tidy())
+	converted, ok := blockstate.ToJava(source)
 	if !ok {
 		return result, nil
 	}
