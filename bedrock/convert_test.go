@@ -74,7 +74,7 @@ func TestChunkConversionAndWater(t *testing.T) {
 	layers[0][4] = `minecraft:missing_block []`
 	layers[1][4] = layers[1][0]
 	layers[0][5] = `minecraft:bed ["direction"=2,"head_piece_bit"=true,"occupied_bit"=false]`
-	entities := map[[3]uint8]string{{0, 5, 0}: `{id:"Bed",color:8b}`, {0, 3, 0}: `{id:"Chest",Items:[]}`}
+	entities := map[[3]uint8]string{{0, 5, 0}: `{id:"Bed",color:8b}`, {0, 3, 0}: `{id:"UnknownEntity"}`}
 	want := []ir.IRBlock{
 		`minecraft:cobblestone ["waterlogged"="true"]`,
 		`minecraft:cobblestone ["waterlogged"="true"]`,
@@ -100,6 +100,47 @@ func TestChunkConversionAndWater(t *testing.T) {
 	layers[0][0] = ir.IRBlock(`minecraft:smooth_quartz_stairs ["minecraft:corner"="inner_left","upside_down_bit"=false,"weirdo_direction"=3]`)
 	newer := convertFixture(t, layers[:1], nil, 0)
 	assertBlock(t, newer.Sections[0].Blocks.Get(layer_storage.At(0, 0, 0)), `minecraft:smooth_quartz_stairs ["facing"="north","half"="bottom","shape"="straight"]`)
+}
+
+func TestChestAndSignEntities(t *testing.T) {
+	layers := [][]ir.IRBlock{airLayer()}
+	layers[0][0] = `minecraft:chest ["minecraft:cardinal_direction"="north"]`
+	layers[0][1] = `minecraft:birch_standing_sign ["ground_sign_direction"=0]`
+	layers[0][2] = `minecraft:birch_hanging_sign ["hanging"=true,"ground_sign_direction"=0]`
+	layers[0][3] = layers[0][2]
+	converted := convertFixture(t, layers, map[[3]uint8]string{
+		{0, 0, 0}: `{id:"Chest",pairx:1,pairz:0,Items:[{Name:"minecraft:oak_log",Count:4b,Slot:2b}]}`,
+		{0, 1, 0}: `{id:"Sign",Text:"旧版"}`,
+		{0, 2, 0}: `{id:"HangingSign",FrontText:{Text:"悬挂"},IsWaxed:1b}`,
+		{0, 3, 0}: `{id:"Sign",FrontText:{Text:"共用 ID"}}`,
+	}, -4)
+	if len(converted.Diagnostics) != 0 || len(converted.BlockEntities) != 4 {
+		t.Fatalf("entities: %v, diagnostics: %v", converted.BlockEntities, converted.Diagnostics)
+	}
+	chest := converted.Sections[-4].Blocks.Get(layer_storage.At(0, 0, 0))
+	if !chest.States().CheckKey("facing", "north") || !chest.States().CheckKey("type", "left") {
+		t.Fatalf("unexpected paired chest: %s", chest)
+	}
+	for _, entity := range converted.BlockEntities {
+		if entity.NBT["x"] != entity.Pos.X || entity.NBT["y"] != entity.Pos.Y || entity.NBT["z"] != entity.Pos.Z {
+			t.Fatalf("entity coordinates differ: %+v", entity)
+		}
+		switch entity.Pos.Y {
+		case -64:
+			items, ok := nbt.Compounds(entity.NBT["Items"])
+			if entity.NBT["id"] != "minecraft:chest" || !ok || len(items) != 1 || items[0]["id"] != "minecraft:oak_log" {
+				t.Fatalf("unexpected chest: %v", entity.NBT)
+			}
+		case -63:
+			if entity.NBT["id"] != "minecraft:sign" {
+				t.Fatalf("unexpected sign: %v", entity.NBT)
+			}
+		case -62, -61:
+			if entity.NBT["id"] != "minecraft:hanging_sign" {
+				t.Fatalf("unexpected hanging sign: %v", entity.NBT)
+			}
+		}
+	}
 }
 
 func airLayer() []ir.IRBlock {

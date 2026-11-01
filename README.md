@@ -24,6 +24,9 @@ Java 状态用 `ir.IRBlock` 表示，即方块名与属性的规范文本。
 
 基础映射完成后，实体规则根据源 NBT 修改状态或产出 Java 方块实体。
 床的颜色进入方块名，花盆植物进入盆栽名称。
+箱子用配对箱的世界坐标确定双箱左右半，并转换箱内物品、名称和战利品表路径。
+告示牌和悬挂告示牌保留正反面文字、最近的染料颜色、发光状态和封蜡状态。
+旧版告示牌的顶层文字作为正面，缺失的背面使用空白文字。
 规则的输入同时包含 section 内坐标和世界绝对坐标。
 输出实体的 NBT 坐标与其 `Pos` 一致。
 规则结构见[床](bedrock/blockentities/bed/NBT.md)和[花盆](bedrock/blockentities/flower_pot/NBT.md)。
@@ -90,8 +93,14 @@ hash 是由完整方块状态计算的数值标识。
 错误返回给区块入口，入口丢弃该条输出并记录诊断。
 注册表由 `bedrock` 持有，让规则子包可以依赖共享类型而不形成循环导入。
 
+箱子物品由 `items.ConvertItem` 转换。
+它支持可查到 Java 方块名的方块物品，以及药水、药水箭和书本。
+附魔和耐久写入 Java 物品组件；组件是物品上的附加数据。
+无法转换的条目整体跳过，所有条目都跳过时仍保留空箱实体。
+范围、文字近似转换和映射数据来源见 [items 包说明](bedrock/items/doc.go)。
+
 需要按请求读取并缓存区块时，`adapt.OnDemandConverter` 是预留的适配类型。
-`bedrock/items`、`bedrock/biomes`、`bedrock/actors` 和存档命令入口也只预留职责。
+`bedrock/biomes`、`bedrock/actors` 和存档命令入口也只预留职责。
 
 ## 用法
 

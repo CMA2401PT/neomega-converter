@@ -14,11 +14,13 @@ import (
 	"neomega-converter/bedrock/blockentities"
 	"neomega-converter/bedrock/blockentities/banner"
 	"neomega-converter/bedrock/blockentities/bed"
+	"neomega-converter/bedrock/blockentities/chest"
 	"neomega-converter/bedrock/blockentities/flower_pot"
 	"neomega-converter/bedrock/blockentities/jukebox"
 	"neomega-converter/bedrock/blockentities/lectern"
 	"neomega-converter/bedrock/blockentities/note_block"
 	"neomega-converter/bedrock/blockentities/shulker_box"
+	"neomega-converter/bedrock/blockentities/sign"
 	"neomega-converter/bedrock/blockentities/skull"
 )
 
@@ -32,6 +34,9 @@ var entityRules = map[string]blockentities.ConvertFunc{
 	lectern.ID:     lectern.Convert,
 	note_block.ID:  note_block.Convert,
 	skull.ID:       skull.Convert,
+	chest.ID:       chest.Convert,
+	sign.ID:        sign.Convert,
+	sign.HangingID: sign.Convert,
 }
 
 const air ir.IRBlock = "minecraft:air []"
