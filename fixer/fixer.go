@@ -67,7 +67,18 @@ func New() (*Fixer, error) {
 		return nil, err
 	}
 	f := &Fixer{solid: solid}
-	f.passes = []pass{f.connections, f.fireConnections, f.stairShapes, f.doorHalves, f.snowyGround, f.redstoneConnections}
+	f.passes = []pass{
+		f.connections,
+		f.fireConnections,
+		f.stairShapes,
+		f.doorHalves,
+		f.snowyGround,
+		f.redstoneConnections,
+		f.leafDistances,
+		f.plantHeads,
+		f.campfireSignal,
+		f.noteBlockInstrument,
+	}
 	return f, nil
 }
 
