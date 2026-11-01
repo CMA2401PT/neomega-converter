@@ -12,14 +12,26 @@ import (
 	converts "neomega-blocks/presets/block-converts/v1"
 	"neomega-converter"
 	"neomega-converter/bedrock/blockentities"
+	"neomega-converter/bedrock/blockentities/banner"
 	"neomega-converter/bedrock/blockentities/bed"
 	"neomega-converter/bedrock/blockentities/flower_pot"
+	"neomega-converter/bedrock/blockentities/jukebox"
+	"neomega-converter/bedrock/blockentities/lectern"
+	"neomega-converter/bedrock/blockentities/note_block"
+	"neomega-converter/bedrock/blockentities/shulker_box"
+	"neomega-converter/bedrock/blockentities/skull"
 )
 
 var entityRules = map[string]blockentities.ConvertFunc{
 	// 注册表由调用方持有，让规则子包只依赖共享的输入输出类型。
-	bed.ID:        bed.Convert,
-	flower_pot.ID: flower_pot.Convert,
+	bed.ID:         bed.Convert,
+	flower_pot.ID:  flower_pot.Convert,
+	banner.ID:      banner.Convert,
+	shulker_box.ID: shulker_box.Convert,
+	jukebox.ID:     jukebox.Convert,
+	lectern.ID:     lectern.Convert,
+	note_block.ID:  note_block.Convert,
+	skull.ID:       skull.Convert,
 }
 
 const air ir.IRBlock = "minecraft:air []"
