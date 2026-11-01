@@ -5,6 +5,8 @@ import (
 	"celler/java"
 	"celler/layer_storage"
 	"neomega-blocks/ir"
+
+	nbt "neomega-nbt/presets/v1"
 )
 
 type ConvertedChunk struct {
@@ -14,6 +16,7 @@ type ConvertedChunk struct {
 	Sections      map[int32]*ConvertedSection
 	BlockEntities []java.BlockEntity
 	Diagnostics   []Diagnostic
+	Entities      []nbt.Compound
 }
 
 type ConvertedSection struct {
@@ -27,16 +30,18 @@ type DiagnosticKind string
 // 诊断种类让调用方分别汇总映射缺失、NBT 解码和实体规则问题。
 
 const (
-	UnknownBlock DiagnosticKind = "unknown_block"
-	NBTError     DiagnosticKind = "nbt_error"
-	RuleError    DiagnosticKind = "rule_error"
+	UnknownBlock           DiagnosticKind = "unknown_block"
+	NBTError               DiagnosticKind = "nbt_error"
+	RuleError              DiagnosticKind = "rule_error"
+	UnsupportedBlockEntity DiagnosticKind = "unsupported_block_entity"
 )
 
 type Diagnostic struct {
 	// 可恢复的问题随区块一起返回；合并计数的未知状态可以没有单格坐标。
-	Kind  DiagnosticKind
-	Pos   *celler.BlockPos
-	State ir.IRBlock
-	Count uint64
-	Err   error
+	Kind          DiagnosticKind
+	Pos           *celler.BlockPos
+	State         ir.IRBlock
+	Count         uint64
+	Err           error
+	BlockEntityID string
 }

@@ -222,38 +222,35 @@ mcconv 在 `translate/tables.go` 用 GeyserMC/mappings 和 pmmp/BedrockData 生�
 
 ---
 
-### 3.4 展示框：方块和里面的物品一起消失，且没有诊断
+### 3.4 展示框：方块实体变成 Java 实体
 
-**现状**：存档里的展示框转换后什么都不剩，`Diagnostics` 里也看不到。
+**现状**：已转换。`bedrock/blockentities/item_frame` 把展示框所在格子转成空气，
+并在 `ConvertedChunk.Entities` 里产出 Java `minecraft:item_frame` / `minecraft:glow_item_frame` 实体。
+还缺的部分见本节末尾。
 
-两版的表示不同。
+两版的表示不同，这是这条规则长成这样的原因：
 Bedrock 的展示框是方块 `minecraft:frame` / `minecraft:glow_frame`，朝向在方块状态的 `facing_direction` 里，
 物品、物品旋转和掉落概率在方块实体 `ItemFrame` / `GlowItemFrame` 里。
-Java 的展示框不是方块，是实体 `minecraft:item_frame` / `minecraft:glow_item_frame`，
-存放在 `entities/` 目录的 region 里，所在格子是空气。
+Java 的展示框不是方块，是实体，存放在 `entities/` 目录的 region 里，所在格子是空气。
 
-当前的转换在两层都丢掉了它：
+因此：
 
-- 方块层：neomega-blocks 的转出表把 `frame` / `glow_frame` 映射成空气。Java 没有对应方块，这个映射本身是对的，所以不计入 `unknown_block`。
-- 方块实体层：`ItemFrame` / `GlowItemFrame` 没有注册规则，整条忽略。没有规则的方块实体不产生诊断。
+- neomega-blocks 的转出表把 `frame` / `glow_frame` 映射成空气。Java 没有对应方块，这个映射是对的，不计入 `unknown_block`。
+- 规则拿到的 `Base` 已经是空气，朝向要从 `Input.SourceState`（对齐到目标 Bedrock 版本的源状态）读。
+- 规则在 `Result.Entity` 里返回实体，区块入口把它追加进 `Entities`。
 
-所以展示框本身、框里的物品（包括地图）都会消失。
+字段对应（参照 mcconv `internal/convert/entities.go` 的 frames 部分）：
 
-**为什么不能在方块层修**：Java 没有展示框方块，必须在阶段 1 产出 Java 实体。
-现有的方块实体规则只能返回方块状态和方块实体，`ConvertedChunk` 也没有实体字段，需要先追加实体输出。
+- `facing_direction` 0..5 与 Java `Facing` 编号相同（下、上、北、南、西、东）。
+- `Pos` 是方块中心沿朝向反方向偏移 0.46875；方块坐标写 `TileX/TileY/TileZ`（1.21.4 的写法，1.21.5 起改为 `block_pos`）。
+- `Item` 用 `items.ConvertItem` 转换，去掉 `Slot`；`ItemRotation` 是角度，除以 45 取整到 0..7；`ItemDropChance` 缺省为 1。
+- `UUID` 由世界坐标和维度确定性生成，重复导出得到相同的实体，不同维度同一坐标也不会重号。
 
-**接入时要注意**：
+**还缺的部分**：
 
-- 朝向要从 Bedrock 源状态读。规则拿到的 `Base` 是转换后的 Java 状态，已经是空气，`facing_direction` 不在里面。
-- 字段对应（参照 mcconv `internal/convert/entities.go` 的 frames 部分）：
-  - `facing_direction` 0..5 与 Java `Facing` 编号相同（下、上、北、南、西、东）。
-  - `Pos` 是方块中心沿朝向反方向偏移 0.46875，另写 `block_pos` 为方块坐标。
-  - `Item` 用 `items.ConvertItem` 转换，去掉 `Slot`。物品转不出时保留空展示框。
-  - `ItemRotation` 是角度（Float），除以 45 取整到 0..7 写成 Byte；`ItemDropChance` 原样保留，缺省为 1。
-  - `UUID` 由方块坐标确定性生成，重复导出得到相同的实体。
-- Java 实体写进 `entities/` region，块的外层是 `{DataVersion, Position: [x, z], Entities: [...]}`，与方块所在的 `region/` 分开。
-
-**留位**：实体输出与普通实体（3.5）共用；展示框不依赖 celler 读取 actor 记录，数据全在方块和方块实体里，可以先于普通实体接入。
+- 框里的地图会丢失，展示框本身保留。地图不是方块物品，`items.ConvertItem` 转不出（见 3.1），地图内容还需要转换 `map_*.dat`。
+- `Rotation` 写 `[0, 0]`，没有按朝向写原版的 yaw/pitch。挂载面由 `Facing` 决定，没有在游戏里验证加载后是否需要它。
+- `Fixed`、`Invisible` 等字段没有转换，取 Java 默认值。
 
 ---
 

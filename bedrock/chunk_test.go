@@ -131,26 +131,26 @@ func TestEntityRulesBeforeWater(t *testing.T) {
 }
 
 func TestInvalidEntities(t *testing.T) {
-	// 错误单项不影响同一区块的其它实体，未注册的 id 可以直接跳过。
+	// 错误单项不影响同一区块的其它实体，未注册的 id 单独诊断。
 	bed := ir.IRBlock(`minecraft:bed ["direction"=2,"head_piece_bit"=false,"occupied_bit"=false]`).Tidy()
 	for _, test := range []struct {
-		name      string
-		state     ir.IRBlock
-		entity    nbt.Compound
-		wantError bool
+		name     string
+		state    ir.IRBlock
+		entity   nbt.Compound
+		wantKind converter.DiagnosticKind
 	}{
-		{"missing coordinate", bed, nbt.Compound{"id": "Bed", "color": int8(11), "x": nil}, true},
-		{"wrong coordinate type", bed, nbt.Compound{"id": "Bed", "color": int8(11), "x": int8(1)}, true},
-		{"outside chunk", bed, nbt.Compound{"id": "Bed", "color": int8(11), "x": int32(16)}, true},
-		{"absent section", bed, nbt.Compound{"id": "Bed", "color": int8(11), "y": int32(16)}, true},
-		{"missing id", bed, nbt.Compound{}, true},
-		{"color type", bed, nbt.Compound{"id": "Bed", "color": int32(11)}, true},
-		{"negative color", bed, nbt.Compound{"id": "Bed", "color": int8(-1)}, true},
-		{"color range", bed, nbt.Compound{"id": "Bed", "color": int8(16)}, true},
-		{"plant type", `minecraft:flower_pot ["update_bit"=false]`, nbt.Compound{"id": "FlowerPot", "PlantBlock": int32(1)}, true},
-		{"plant name", `minecraft:flower_pot ["update_bit"=false]`, nbt.Compound{"id": "FlowerPot", "PlantBlock": nbt.Compound{"states": nbt.Compound{}}}, true},
-		{"plant states", `minecraft:flower_pot ["update_bit"=false]`, nbt.Compound{"id": "FlowerPot", "PlantBlock": nbt.Compound{"name": "minecraft:stone", "states": int32(0)}}, true},
-		{"unregistered id", bed, nbt.Compound{"id": "UnknownEntity"}, false},
+		{"missing coordinate", bed, nbt.Compound{"id": "Bed", "color": int8(11), "x": nil}, converter.RuleError},
+		{"wrong coordinate type", bed, nbt.Compound{"id": "Bed", "color": int8(11), "x": int8(1)}, converter.RuleError},
+		{"outside chunk", bed, nbt.Compound{"id": "Bed", "color": int8(11), "x": int32(16)}, converter.RuleError},
+		{"absent section", bed, nbt.Compound{"id": "Bed", "color": int8(11), "y": int32(16)}, converter.RuleError},
+		{"missing id", bed, nbt.Compound{}, converter.RuleError},
+		{"color type", bed, nbt.Compound{"id": "Bed", "color": int32(11)}, converter.RuleError},
+		{"negative color", bed, nbt.Compound{"id": "Bed", "color": int8(-1)}, converter.RuleError},
+		{"color range", bed, nbt.Compound{"id": "Bed", "color": int8(16)}, converter.RuleError},
+		{"plant type", `minecraft:flower_pot ["update_bit"=false]`, nbt.Compound{"id": "FlowerPot", "PlantBlock": int32(1)}, converter.RuleError},
+		{"plant name", `minecraft:flower_pot ["update_bit"=false]`, nbt.Compound{"id": "FlowerPot", "PlantBlock": nbt.Compound{"states": nbt.Compound{}}}, converter.RuleError},
+		{"plant states", `minecraft:flower_pot ["update_bit"=false]`, nbt.Compound{"id": "FlowerPot", "PlantBlock": nbt.Compound{"name": "minecraft:stone", "states": int32(0)}}, converter.RuleError},
+		{"unregistered id", bed, nbt.Compound{"id": "UnknownEntity"}, converter.UnsupportedBlockEntity},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			layers := [][]ir.IRBlock{airLayer()}
@@ -174,7 +174,7 @@ func TestInvalidEntities(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if (len(got.Diagnostics) == 1) != test.wantError || (len(got.Diagnostics) > 0 && got.Diagnostics[0].Kind != converter.RuleError) {
+			if len(got.Diagnostics) != 1 || got.Diagnostics[0].Kind != test.wantKind {
 				t.Fatalf("diagnostics: %+v", got.Diagnostics)
 			}
 			base, _ := converts.ConvertToJava(test.state)

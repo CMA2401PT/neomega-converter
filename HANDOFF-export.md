@@ -24,8 +24,8 @@ fixer 可能很慢（每根柱子要读 8 个邻居），因此修复是调用�
 - celler/java：`NewChunk`、`SetSection`、`WriteChunk`、`WriteLevel`，region 格式已就绪。
 - 留位：`cmd/bedrock-to-java/main.go`（只有 package main），`adapt.OnDemandConverter`（空类型）。
 
-还没实现：生物群系、普通实体、展示框、旗帜图案。
-展示框目前整体消失且没有诊断，原因和接入方式见 CONVERSION-GUIDE 3.4。
+还没实现：生物群系、普通实体、旗帜图案、展示框里的地图。
+展示框已转成 `ConvertedChunk.Entities` 里的 Java 实体，导出时要写进 `entities/` region，见 CONVERSION-GUIDE 3.4。
 
 ## 边界
 

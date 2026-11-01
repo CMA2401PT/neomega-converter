@@ -90,7 +90,7 @@ func TestChunkConversionAndWater(t *testing.T) {
 	if len(converted.BlockEntities) != 0 {
 		t.Fatalf("unexpected Java NBT: %v", converted.BlockEntities)
 	}
-	if len(converted.Diagnostics) != 1 || converted.Diagnostics[0].Kind != converter.UnknownBlock || converted.Diagnostics[0].Count != 1 {
+	if len(converted.Diagnostics) != 2 || converted.Diagnostics[0].Kind != converter.UnknownBlock || converted.Diagnostics[0].Count != 1 || converted.Diagnostics[1].Kind != converter.UnsupportedBlockEntity || converted.Diagnostics[1].BlockEntityID != "UnknownEntity" || converted.Diagnostics[1].Count != 1 {
 		t.Fatalf("unexpected diagnostics: %+v", converted.Diagnostics)
 	}
 	dry := convertFixture(t, layers[:1], nil, 0)

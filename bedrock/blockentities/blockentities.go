@@ -12,12 +12,17 @@ type Input struct {
 	Source   nbt.Compound
 	LocalPos [3]uint8
 	WorldPos celler.BlockPos
+	// 版本对齐后的源状态保留 Java 基础状态无法表达的属性，例如展示框朝向。
+	SourceState ir.IRBlock
+	// 相同坐标在不同维度属于不同实体，生成身份时需要区分。
+	Dimension int32
 }
 
 type Result struct {
-	// 状态总是明确给出；只有需要保留附加数据时才产出 Java 方块实体。
+	// 状态总是明确给出；附加数据可留在方块实体中，也可转成独立实体。
 	State       ir.IRBlock
 	BlockEntity nbt.Compound
+	Entity      nbt.Compound
 }
 
 type ConvertFunc func(Input) (Result, error)

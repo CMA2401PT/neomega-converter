@@ -18,28 +18,28 @@ neomega-converter 把 Bedrock 区块转换为 Java 方块状态，供渲染或�
 
 ```text
 能力                                   输入 → 输出
-ConvertFromBedrock + ConvertToJava     单个 Bedrock 状态 → Java 状态, ok
+bedrock.ConvertState(state)            单个 Bedrock 状态 → Java 状态, ok
 items.ConvertItem(item)                Bedrock 物品 compound → Java 物品 compound 或 nil
-<规则子包>.Convert(Input)              单格 Java 基础状态 + 源 NBT → Java 状态 + 可选 Java 方块实体, err
+bedrock.ConvertBlockEntity(id, Input)  单格方块实体 → Java 状态 + 可选方块实体 / 实体, ok, err
+bedrock.ConvertSection(pos, dim, ...)  单个 Bedrock section + 方块实体 → ConvertedChunk （阶段 1）
 bedrock.ConvertChunk(chunk)            Bedrock 整根柱子 → ConvertedChunk, err      （阶段 1）
 fixer.New()                            → *Fixer, err
 fixer.Fix(center, 8 个邻居)            ConvertedChunk → 修复后的 ConvertedChunk    （阶段 2）
 fixer.FixSection(palette, 6 个邻居)    单 section 的 Java 调色板 → 修复后的调色板
 ```
 
-单个方块状态的两个函数来自 `neomega-blocks/presets/block-converts/v1`，其余都在本模块。
-单格和单 section 的阶段 1 没有独立入口。
-需要 NBT 时，把它们放进只含一个 section 的临时柱子，再调用 `ConvertChunk`，见下文「组合方式」。
+这些入口都在本模块；`ConvertState` 内部使用 `neomega-blocks/presets/block-converts/v1` 的两个函数。
+阶段 1 的三个粒度共用同一套实现：`ConvertSection` 和 `ConvertChunk` 只差在输入是已解码的单个 section 还是整根柱子的原始记录。
 
 ### 单个方块状态
 
 存档里的状态可能来自任意 Bedrock 版本，而 Java 转出表只认目标版本的状态。
 所以转换分两步：`ConvertFromBedrock` 先把旧方块名、旧属性和缺失的属性对齐到目标版本，`ConvertToJava` 再转成 Java。
-本模块内部的 `ConvertChunk`、花盆规则和物品转换都按这个顺序调用。
+`bedrock.ConvertState` 就是这两步，本模块的区块转换、花盆规则和物品转换都经过它。
 
 ```text
-nemc, ok = ConvertFromBedrock(state.Tidy())
-java, ok = ConvertToJava(nemc)
+ConvertState(state.Tidy()) → (java, ok)
+  内部：nemc = ConvertFromBedrock(state)；java = ConvertToJava(nemc)
   目标集合：NEMC 调色板（参考 Bedrock 1.21.50，共 15156 个状态），全部能转出
   输出：Java 1.21.4 的完整状态，已经 tidy
   ok=false：方块名不认识；或属性值不在取值域内，例如 weirdo_direction=99
@@ -48,7 +48,7 @@ java, ok = ConvertToJava(nemc)
     179 个方块名映射成空气    教育版元素与化合物、hard_*glass、colored_torch_*、
                               underwater_torch、border_block、invisible_bedrock、micro_block、
                               旧版 PE 方块（glowingobsidian、netherreactor、info_update 等）
-    frame / glow_frame 映射成空气，因为 Java 的展示框是实体，不是方块（见下文 ConvertChunk）
+    frame / glow_frame 映射成空气，因为 Java 的展示框是实体，不是方块；实体由下文的 item_frame 规则产出
     颜色或内容在 NBT 里的方块只得到默认外观
                               bed → red_bed，standing_banner → white_banner，flower_pot → 空花盆
     输出不带 waterlogged
@@ -85,15 +85,16 @@ items.ConvertItem(bedrockItem) → javaItem 或 nil
 ### 方块实体规则：单格
 
 每个规则子包在 `bedrock/blockentities/` 下，导出 `ID`（Bedrock 实体 id）和 `Convert`。
+`bedrock.ConvertBlockEntity` 按 id 从注册表选规则。
 
 ```text
-<子包>.Convert(Input{Base, Source, LocalPos, WorldPos}) → (Result{State, BlockEntity}, err)
-  Base 必须是已转换的 Java 状态，规则在它的基础上改名或改属性
+ConvertBlockEntity(id, Input{Base, SourceState, Source, LocalPos, WorldPos, Dimension})
+    → (Result{State, BlockEntity, Entity}, ok, err)
+  Base 是已转换的 Java 状态，规则在它的基础上改名或改属性
+  SourceState 是对齐到目标 Bedrock 版本的源状态，供 Java 状态里已经没有的属性使用（展示框朝向）
+  ok=false：这个 id 没有规则
   err != nil：调用方应保留 Base，丢弃本条输出
 ```
-
-按 id 选规则的注册表在 `bedrock` 包内部，没有导出。
-单独使用时，调用方自己按 `ID` 选子包。
 
 | 子包 / ID | 改什么 | 报错 | 降级 |
 |---|---|---|---|
@@ -107,17 +108,19 @@ items.ConvertItem(bedrockItem) → javaItem 或 nil
 | skull / `Skull` | 落地头颅的 rotation | 落地头颅缺 Float Rotation | 玩家头颅的皮肤丢弃，不产出方块实体 |
 | chest / `Chest` | 双箱 type=left/right；产出方块实体 | Items 不是 compound 列表；pairx/pairz 不是 Int；配对箱没有水平 facing | 转不出的物品逐条跳过；配对坐标不相邻时按单箱；LootTable 原样复制，不改路径格式 |
 | sign / `Sign`、`HangingSign` | 产出方块实体 | FrontText 不是 compound | 颜色取最近的 16 种染料；每面只取前 4 行；格式码不解析 |
+| item_frame / `ItemFrame`、`GlowItemFrame` | 方块变成空气，产出 Java 展示框实体 | SourceState 不是 frame / glow_frame，或 facing_direction 不是 0..5 | 物品转不出时保留空框（地图不是方块物品，目前都转不出）；Rotation 写 [0,0]，未在游戏里验证 |
 
-只有 chest 和 sign 产出 Java 方块实体，其余规则只改方块状态。
+只有 chest 和 sign 产出 Java 方块实体，只有 item_frame 产出 Java 实体，其余规则只改方块状态。
 
 ### bedrock.ConvertChunk：整根柱子（阶段 1）
 
 ```text
 ConvertChunk(*cellerbedrock.Chunk) → (*ConvertedChunk, err)
-  第 0 层：按调色板条目做上面的两步转换，失败的条目输出空气
-  方块实体：对上表注册的 id 调用规则，产出的方块实体坐标改写为世界坐标
+ConvertSection(pos, dim, *cellerbedrock.Section, []blockEntity) → *ConvertedChunk
+  第 0 层：按调色板条目做 ConvertState，失败的条目输出空气
+  方块实体：对上表注册的 id 调用规则，产出的方块实体坐标改写为世界坐标，实体进 Entities
   第 1 层：water / flowing_water 让最终状态附带 waterlogged="true"
-  err（整根柱子失败）：任一 section 解码失败
+  err（仅 ConvertChunk，整根柱子失败）：任一 section 解码失败
         不支持的 subchunk 版本（只支持 1、8、9）、运行时调色板、
         调色板条目缺 states 或 Int version（展平前的 name+val 条目属于此类）、
         索引越界、尾部多余字节
@@ -126,16 +129,14 @@ ConvertChunk(*cellerbedrock.Chunk) → (*ConvertedChunk, err)
     nbt_error      方块实体记录整体解码失败；整根柱子跳过实体规则，方块照常
     rule_error     实体缺 Int x/y/z、不在本柱子或所在 section 不存在、缺字符串 id（这几种没有坐标）
                    或规则返回 err（有坐标和基础状态）；该实体的效果丢弃，保留基础状态
+    unsupported_block_entity  没有规则的方块实体，按 BlockEntityID 合并，Count 为条数；只保留基础状态
+      例如熔炉、木桶、漏斗、发射器、投掷器、酿造台的物品，刷怪笼、命令方块、信标、蜂巢的数据
   降级（没有诊断）：
     单个方块状态的所有降级，包括 179 个映射成空气的方块名
-    没有注册规则的方块实体整条忽略，只剩基础状态
-      例如熔炉、木桶、漏斗、发射器、投掷器、酿造台的物品，刷怪笼、命令方块、信标、蜂巢的数据
-    展示框整体消失：方块是空气，ItemFrame / GlowItemFrame 没有规则，框里的物品（包括地图）一起丢失
-      Java 的展示框是实体，修复要先给 ConvertedChunk 加实体输出，见 CONVERSION-GUIDE 3.4
     基础状态转不出的格子不执行实体规则（已计入 unknown_block）
     第 1 层只识别水；waterlogged 会附加到任意基础状态上，包括 Java 不能含水的方块和空气
       waterlogged 是本仓库 IR 的扩展属性，不在 Java 属性表里，写出存档时由写出方决定怎么处理
-    Biomes 恒为 nil；普通实体不读取
+    Biomes 恒为 nil；普通实体（生物、盔甲架等）不读取，Entities 里只有展示框
 ```
 
 ### fixer：邻接修复（阶段 2）
@@ -171,15 +172,11 @@ f.FixSection(palette, [6]neighbour) → palette        邻居顺序 west/east/do
 
 ```text
 单格，不需要 NBT：
-  nemc, ok = ConvertFromBedrock(state.Tidy())
-  java, ok = ConvertToJava(nemc)
+  java, ok = bedrock.ConvertState(state.Tidy())
 
 单格或单 section，需要 NBT 和含水（阶段 1）：
-  chunk = cellerbedrock.NewChunk(pos, dim)
-  chunk.SetSection(只含这一个 section 的源数据)
-  chunk.SetBlockEntities(落在这个 section 里的实体)
-  converted, err = bedrock.ConvertChunk(chunk)
-  palette = converted.Sections[y].Blocks
+  converted = bedrock.ConvertSection(pos, dim, section, 落在这个 section 里的方块实体)
+  palette = converted.Sections[section.Y].Blocks
 
 单 section，没有区块上下文（viewer 上传预览）：
   fixed = f.FixSection(javaPalette, [6]{west, east, down, up, north, south 或 nil})
@@ -233,6 +230,7 @@ section 解码失败通过 `error` 返回。
 - `unknown_block`：未知方块输出空气，相同源状态按受影响格数合并计数。
 - `nbt_error`：实体列表无法解码，区块的方块状态仍可输出。
 - `rule_error`：单条实体的字段或规则出错，保留基础状态。
+- `unsupported_block_entity`：方块实体没有对应规则，按 id 合并计数，只保留基础状态。
 
 没有生物群系映射的 section，其 `Biomes` 为 nil。
 
@@ -277,7 +275,7 @@ hash 是由完整方块状态计算的数值标识。
 | 物品 | 附魔、物品变体、嵌套容器 | `bedrock/items`，由方块实体规则调用 |
 | 邻居的 Java 状态 | 栅栏、楼梯、snowy、树叶距离 | `fixer/` 加一个 pass |
 | 生物群系 | | `bedrock/biomes` |
-| 方块实体要变成 Java 实体 | 展示框 | `bedrock/blockentities/<子包>`，需要先给规则和 `ConvertedChunk` 加实体输出 |
+| 方块实体要变成 Java 实体 | 展示框 | `bedrock/blockentities/<子包>`，在 `Result.Entity` 里返回 |
 | 普通实体 | 生物、盔甲架 | `bedrock/actors` |
 | 世界元数据、存档写出 | `level.dat`、region | `cmd/bedrock-to-java` |
 
