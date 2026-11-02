@@ -33,7 +33,7 @@ func TestPlantHeads(t *testing.T) {
 			got := fixSection(f, chunk, sectionNeighbours{})
 			assertBlock(t, got[cell(8, 8, 8)], stateBlock(t, test.name+"_plant", properties))
 			assertBlock(t, got[cell(8, 8+test.dy, 8)], stateBlock(t, test.name, properties))
-			if len(runPass(f.plantHeads, got, sectionNeighbours{})) != 0 {
+			if len(runPass(plantTarget, f.plantHeads, got, sectionNeighbours{})) != 0 {
 				t.Fatal("unchanged plants were reported as changes")
 			}
 

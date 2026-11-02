@@ -28,10 +28,12 @@ func fixSection(f *Fixer, blocks []ir.IRBlock, neighbours sectionNeighbours) []i
 }
 
 func runPass(
+	cares func(ir.IRBlock) bool,
 	run func(snapshot) map[position]ir.IRBlock,
 	blocks []ir.IRBlock,
 	neighbours sectionNeighbours,
 ) map[int]ir.IRBlock {
+	// 直接调用规则也提供目标索引，遵守与正式驱动相同的输入约定。
 	section := palette(blocks)
 	grid := map[sectionKey]*layer_storage.Palette[ir.IRBlock]{{}: section}
 	for side, values := range neighbours {
@@ -39,8 +41,10 @@ func runPass(
 			grid[sectionKey(sideOffset(side))] = palette(values)
 		}
 	}
+	sections := map[int32]*layer_storage.Palette[ir.IRBlock]{0: section}
 	changes := run(snapshot{
-		sections: map[int32]*layer_storage.Palette[ir.IRBlock]{0: section},
+		sections: sections,
+		targets:  selectTargets(sections, cares),
 		get:      getter(grid),
 		solid:    make(map[ir.IRBlock]uint8),
 	})

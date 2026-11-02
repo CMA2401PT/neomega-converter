@@ -21,7 +21,7 @@ func TestLeafDistances(t *testing.T) {
 	chunk[cell(8, 4, 8)] = stateBlock(t, "oak_leaves", map[string]string{
 		"persistent": "true", "distance": "7",
 	})
-	changes := runPass(f.leafDistances, chunk, sectionNeighbours{})
+	changes := runPass(leafTarget, f.leafDistances, chunk, sectionNeighbours{})
 	for y := 2; y <= 7; y++ {
 		if y == 4 {
 			continue
@@ -36,7 +36,7 @@ func TestLeafDistances(t *testing.T) {
 	for index, block := range changes {
 		chunk[index] = block
 	}
-	if len(runPass(f.leafDistances, chunk, sectionNeighbours{})) != 0 {
+	if len(runPass(leafTarget, f.leafDistances, chunk, sectionNeighbours{})) != 0 {
 		t.Fatal("unchanged distances were reported as changes")
 	}
 }
@@ -57,7 +57,7 @@ func TestLeafBoundaryDistances(t *testing.T) {
 		if pos.x >= 6 && pos.x <= 9 && pos.z >= 6 && pos.z <= 9 {
 			distance = "7"
 		}
-		changes := runPass(f.leafDistances, chunk, sectionNeighbours{})
+		changes := runPass(leafTarget, f.leafDistances, chunk, sectionNeighbours{})
 		assertBlock(t, changes[cell(pos.x, pos.y, pos.z)], stateBlock(t, "oak_leaves", map[string]string{
 			"persistent": "false", "distance": distance,
 		}))
@@ -79,7 +79,7 @@ func TestLeafLogFamilies(t *testing.T) {
 			chunk[cell(8, 8, 8)] = stateBlock(t, "oak_leaves", map[string]string{
 				"persistent": "false", "distance": "2",
 			})
-			changes := runPass(f.leafDistances, chunk, sectionNeighbours{})
+			changes := runPass(leafTarget, f.leafDistances, chunk, sectionNeighbours{})
 			assertBlock(t, changes[cell(8, 8, 8)], stateBlock(t, "oak_leaves", map[string]string{
 				"persistent": "false", "distance": test.distance,
 			}))

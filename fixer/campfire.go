@@ -11,7 +11,7 @@ func campfireTarget(block ir.IRBlock) bool {
 func (f *Fixer) campfireSignal(view snapshot) map[position]ir.IRBlock {
 	// 底座决定烟柱高度，转换后需从下方重新恢复。
 	changes := make(map[position]ir.IRBlock)
-	for pos, block := range view.targetBlocks(campfireTarget) {
+	for pos, block := range view.targetBlocks() {
 		below, exists := view.get(pos.x, pos.y-1, pos.z)
 		signal := "false"
 		if exists && below.NameWithNameSpace() == "minecraft:hay_block" {

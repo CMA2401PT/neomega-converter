@@ -14,7 +14,7 @@ func doorTarget(block ir.IRBlock) bool {
 func (f *Fixer) doorHalves(view snapshot) map[position]ir.IRBlock {
 	// 往返后两半保留的信息互补，统一返回改动才能让两半都读取原始伙伴状态。
 	changes := make(map[position]ir.IRBlock)
-	for pos, block := range view.targetBlocks(doorTarget) {
+	for pos, block := range view.targetBlocks() {
 		states := block.States()
 		side, partnerHalf := 2, "lower"
 		properties := []string{"facing", "open"}

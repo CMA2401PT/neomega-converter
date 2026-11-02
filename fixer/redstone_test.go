@@ -124,7 +124,7 @@ func TestRedstoneConnections(t *testing.T) {
 			}
 			got := fixSection(f, chunk, sectionNeighbours{})
 			assertBlock(t, got[index], want)
-			if _, changed := runPass(f.redstoneConnections, got, sectionNeighbours{})[index]; changed {
+			if _, changed := runPass(redstoneTarget, f.redstoneConnections, got, sectionNeighbours{})[index]; changed {
 				t.Fatal("unchanged wire was reported as a change")
 			}
 		})
@@ -152,7 +152,7 @@ func TestRedstoneBoundaries(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			chunk := airChunk(t)
 			chunk[test.current], chunk[test.connected] = wire, wire
-			if _, changed := runPass(f.redstoneConnections, chunk, sectionNeighbours{})[test.current]; changed {
+			if _, changed := runPass(redstoneTarget, f.redstoneConnections, chunk, sectionNeighbours{})[test.current]; changed {
 				t.Fatal("wire changed with missing neighbour data")
 			}
 			var neighbours sectionNeighbours
@@ -163,9 +163,9 @@ func TestRedstoneBoundaries(t *testing.T) {
 			for _, side := range test.sides {
 				states[side] = "side"
 			}
-			assertBlock(t, runPass(f.redstoneConnections, chunk, neighbours)[test.current], stateBlock(t, "redstone_wire", states))
+			assertBlock(t, runPass(redstoneTarget, f.redstoneConnections, chunk, neighbours)[test.current], stateBlock(t, "redstone_wire", states))
 			neighbours[test.side][test.probe] = wire
-			if _, changed := runPass(f.redstoneConnections, chunk, neighbours)[test.current]; changed {
+			if _, changed := runPass(redstoneTarget, f.redstoneConnections, chunk, neighbours)[test.current]; changed {
 				t.Fatal("wire changed with a slope in an adjacent subchunk")
 			}
 		})
@@ -183,7 +183,7 @@ func TestRedstoneMissingDiagonal(t *testing.T) {
 		neighbours[side] = airChunk(t)
 	}
 	f := &Fixer{}
-	if _, changed := runPass(f.redstoneConnections, chunk, neighbours)[cell(0, 15, 8)]; changed {
+	if _, changed := runPass(redstoneTarget, f.redstoneConnections, chunk, neighbours)[cell(0, 15, 8)]; changed {
 		t.Fatal("wire changed without the diagonal subchunk needed above the west neighbour")
 	}
 }

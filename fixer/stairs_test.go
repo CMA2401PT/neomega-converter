@@ -42,7 +42,7 @@ func TestStairCorners(t *testing.T) {
 					states["shape"] = corner.shape
 					got := fixSection(f, chunk, sectionNeighbours{})
 					assertBlock(t, got[cell(8, 8, 8)], stateBlock(t, "oak_stairs", states))
-					if len(runPass(f.stairShapes, got, sectionNeighbours{})) != 0 {
+					if len(runPass(stairTarget, f.stairShapes, got, sectionNeighbours{})) != 0 {
 						t.Fatal("unchanged stairs were reported as changes")
 					}
 				})
@@ -91,12 +91,12 @@ func TestStairUnknownFacing(t *testing.T) {
 		chunk := airChunk(t)
 		pos := cell(8, 8, 8)
 		chunk[pos] = source.Tidy()
-		if changes := runPass(f.stairShapes, chunk, sectionNeighbours{}); len(changes) != 0 {
+		if changes := runPass(stairTarget, f.stairShapes, chunk, sectionNeighbours{}); len(changes) != 0 {
 			t.Fatalf("unknown facing was changed: %v", changes)
 		}
 		chunk[pos] = stateBlock(t, "oak_stairs", nil)
 		chunk[cell(8, 8, 7)] = source.Tidy()
-		if changes := runPass(f.stairShapes, chunk, sectionNeighbours{}); len(changes) != 0 {
+		if changes := runPass(stairTarget, f.stairShapes, chunk, sectionNeighbours{}); len(changes) != 0 {
 			t.Fatalf("unknown facing used as a corner partner: %v", changes)
 		}
 	}

@@ -27,7 +27,7 @@ func stairTarget(block ir.IRBlock) bool {
 func (f *Fixer) stairShapes(view snapshot) map[position]ir.IRBlock {
 	// 楼梯朝向和上下半部保持原值，只根据前后伙伴补全拐角。
 	changes := make(map[position]ir.IRBlock)
-	for pos, block := range view.targetBlocks(stairTarget) {
+	for pos, block := range view.targetBlocks() {
 		states := block.States()
 		facing, _ := states.Get("facing")
 		facingName, ok := facing.(string)

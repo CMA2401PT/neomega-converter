@@ -23,7 +23,7 @@ func (f *Fixer) redstoneConnections(view snapshot) map[position]ir.IRBlock {
 		{name: "south", side: 5, z: 1},
 	}
 wireLoop:
-	for pos, block := range view.targetBlocks(redstoneTarget) {
+	for pos, block := range view.targetBlocks() {
 		x, y, z := pos.x, pos.y, pos.z
 		var connected [4]bool
 		count, single := 0, 0

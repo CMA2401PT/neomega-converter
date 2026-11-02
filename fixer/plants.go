@@ -25,7 +25,7 @@ func plantDirection(block ir.IRBlock) int {
 
 func (f *Fixer) plantHeads(view snapshot) map[position]ir.IRBlock {
 	changes := make(map[position]ir.IRBlock)
-	for pos, block := range view.targetBlocks(plantTarget) {
+	for pos, block := range view.targetBlocks() {
 		kind := strings.TrimSuffix(block.NameWithNameSpace(), "_plant")
 		dy := plantDirection(block)
 		other, exists := view.get(pos.x, pos.y+dy, pos.z)

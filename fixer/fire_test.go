@@ -40,16 +40,16 @@ func TestFireConnections(t *testing.T) {
 			want := stateBlock(t, "fire", states)
 			got := fixSection(f, chunk, sectionNeighbours{})
 			assertBlock(t, got[cell(8, 8, 8)], want)
-			if len(runPass(f.fireConnections, got, sectionNeighbours{})) != 0 {
+			if len(runPass(fireTarget, f.fireConnections, got, sectionNeighbours{})) != 0 {
 				t.Fatal("unchanged fire was reported as a change")
 			}
 			if test.name != "air" {
 				// 单面实心才能分辨是否取了邻居朝回火的面。
 				oneFace := &Fixer{solid: solidtable.Table{java.BlockToHash(stone): 1 << (test.side ^ 1)}}
-				assertBlock(t, runPass(oneFace.fireConnections, chunk, sectionNeighbours{})[cell(8, 8, 8)], want)
+				assertBlock(t, runPass(fireTarget, oneFace.fireConnections, chunk, sectionNeighbours{})[cell(8, 8, 8)], want)
 				oneFace.solid[java.BlockToHash(stone)] = 1 << test.side
 				states[test.name] = "false"
-				assertBlock(t, runPass(oneFace.fireConnections, chunk, sectionNeighbours{})[cell(8, 8, 8)], stateBlock(t, "fire", states))
+				assertBlock(t, runPass(fireTarget, oneFace.fireConnections, chunk, sectionNeighbours{})[cell(8, 8, 8)], stateBlock(t, "fire", states))
 			}
 		})
 	}

@@ -24,7 +24,7 @@ func noteBlockTarget(block ir.IRBlock) bool {
 func (f *Fixer) noteBlockInstrument(view snapshot) map[position]ir.IRBlock {
 	// 头颅优先于底座，单格实体转换无法得到这两处邻接信息。
 	changes := make(map[position]ir.IRBlock)
-	for pos, block := range view.targetBlocks(noteBlockTarget) {
+	for pos, block := range view.targetBlocks() {
 		instrument := ""
 		if above, exists := view.get(pos.x, pos.y+1, pos.z); exists {
 			instrument = headInstruments[above.ShortName()]

@@ -22,7 +22,7 @@ func (f *Fixer) leafDistances(view snapshot) map[position]ir.IRBlock {
 	leaves := make(map[position]ir.IRBlock)
 	distances := make(map[position]int)
 	var queue []position
-	for pos, block := range view.targetBlocks(leafTarget) {
+	for pos, block := range view.targetBlocks() {
 		name := block.ShortName()
 		if isLeaf(block) {
 			leaves[pos] = block

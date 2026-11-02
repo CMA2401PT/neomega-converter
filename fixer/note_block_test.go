@@ -49,7 +49,7 @@ func TestNoteBlockInstrument(t *testing.T) {
 			assertBlock(t, got[cell(8, 8, 8)], stateBlock(t, "note_block", map[string]string{
 				"instrument": test.instrument, "note": "13", "powered": "true",
 			}))
-			if len(runPass(f.noteBlockInstrument, got, sectionNeighbours{})) != 0 {
+			if len(runPass(noteBlockTarget, f.noteBlockInstrument, got, sectionNeighbours{})) != 0 {
 				t.Fatal("unchanged instruments were reported as changes")
 			}
 		})
@@ -73,7 +73,7 @@ func TestNoteBlockHeadInstrument(t *testing.T) {
 			chunk[cell(8, 8, 8)] = stateBlock(t, "note_block", nil)
 			chunk[cell(8, 7, 8)] = stateBlock(t, "gold_block", nil)
 			chunk[cell(8, 9, 8)] = stateBlock(t, test.head, nil)
-			changes := runPass(f.noteBlockInstrument, chunk, sectionNeighbours{})
+			changes := runPass(noteBlockTarget, f.noteBlockInstrument, chunk, sectionNeighbours{})
 			assertBlock(t, changes[cell(8, 8, 8)], stateBlock(t, "note_block", map[string]string{
 				"instrument": test.instrument,
 			}))
@@ -85,19 +85,19 @@ func TestNoteBlockMissingNeighbours(t *testing.T) {
 	f := &Fixer{}
 	chunk, adjacent := airChunk(t), airChunk(t)
 	chunk[cell(8, 0, 8)] = stateBlock(t, "note_block", map[string]string{"instrument": "bell"})
-	changes := runPass(f.noteBlockInstrument, chunk, sectionNeighbours{})
+	changes := runPass(noteBlockTarget, f.noteBlockInstrument, chunk, sectionNeighbours{})
 	assertBlock(t, changes[cell(8, 0, 8)], stateBlock(t, "note_block", map[string]string{"instrument": "harp"}))
 	adjacent[cell(8, 15, 8)] = stateBlock(t, "gold_block", nil)
-	if len(runPass(f.noteBlockInstrument, chunk, sectionNeighbours{2: adjacent})) != 0 {
+	if len(runPass(noteBlockTarget, f.noteBlockInstrument, chunk, sectionNeighbours{2: adjacent})) != 0 {
 		t.Fatal("gold block in lower section must retain bell")
 	}
 
 	chunk = airChunk(t)
 	chunk[cell(8, 15, 8)] = stateBlock(t, "note_block", nil)
 	chunk[cell(8, 14, 8)] = stateBlock(t, "gold_block", nil)
-	changes = runPass(f.noteBlockInstrument, chunk, sectionNeighbours{})
+	changes = runPass(noteBlockTarget, f.noteBlockInstrument, chunk, sectionNeighbours{})
 	assertBlock(t, changes[cell(8, 15, 8)], stateBlock(t, "note_block", map[string]string{"instrument": "bell"}))
 	adjacent[cell(8, 0, 8)] = stateBlock(t, "zombie_head", nil)
-	changes = runPass(f.noteBlockInstrument, chunk, sectionNeighbours{3: adjacent})
+	changes = runPass(noteBlockTarget, f.noteBlockInstrument, chunk, sectionNeighbours{3: adjacent})
 	assertBlock(t, changes[cell(8, 15, 8)], stateBlock(t, "note_block", map[string]string{"instrument": "zombie"}))
 }

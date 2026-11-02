@@ -77,7 +77,7 @@ func TestFenceConnections(t *testing.T) {
 	if !slices.Equal(fixSection(f, got, sectionNeighbours{}), got) {
 		t.Fatal("connection repair is not idempotent")
 	}
-	if len(runPass(f.connections, got, sectionNeighbours{})) != 0 {
+	if len(runPass(connectionTarget, f.connections, got, sectionNeighbours{})) != 0 {
 		t.Fatal("unchanged hashes were reported as changes")
 	}
 }

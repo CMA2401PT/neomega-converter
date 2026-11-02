@@ -36,7 +36,7 @@ func TestDoorRoundtripRepair(t *testing.T) {
 						if !slices.Equal(chunk, before) {
 							t.Fatal("door repair mutated input snapshot")
 						}
-						if len(runPass(f.doorHalves, got, sectionNeighbours{})) != 0 {
+						if len(runPass(doorTarget, f.doorHalves, got, sectionNeighbours{})) != 0 {
 							t.Fatal("unchanged doors reported as changes")
 						}
 					})
@@ -98,7 +98,7 @@ func TestDoorRequiresMatchingPartner(t *testing.T) {
 					"half": half, "facing": "east", "hinge": "right", "open": "true",
 				})
 				chunk[cell(4, partnerY, 9)] = stateBlock(t, partner.name, partner.states)
-				if len(runPass(f.doorHalves, chunk, sectionNeighbours{})) != 0 {
+				if len(runPass(doorTarget, f.doorHalves, chunk, sectionNeighbours{})) != 0 {
 					t.Fatal("mismatched partner changed door state")
 				}
 			})
@@ -121,7 +121,7 @@ func TestDoorKeepsEachHalfPowered(t *testing.T) {
 		"half": "upper", "facing": "north", "open": "false", "hinge": "right", "powered": "false",
 	})
 	before := slices.Clone(chunk)
-	changes := runPass(f.doorHalves, chunk, sectionNeighbours{})
+	changes := runPass(doorTarget, f.doorHalves, chunk, sectionNeighbours{})
 	if !slices.Equal(chunk, before) || len(changes) != 2 {
 		t.Fatal("door pass must return both changes without modifying its snapshot")
 	}

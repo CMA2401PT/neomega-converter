@@ -20,7 +20,7 @@ func snowyTarget(block ir.IRBlock) bool {
 func (f *Fixer) snowyGround(view snapshot) map[position]ir.IRBlock {
 	// snowy 由上方一格唯一决定，往返丢失后按原版规则重算即可。
 	changes := make(map[position]ir.IRBlock)
-	for pos, block := range view.targetBlocks(snowyTarget) {
+	for pos, block := range view.targetBlocks() {
 		states := block.States()
 		above, _ := neighbour(view.get, pos, 3)
 		snowy := snowBlocks[above.NameWithNameSpace()]

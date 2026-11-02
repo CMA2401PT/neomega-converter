@@ -27,7 +27,7 @@ func TestCampfireSignal(t *testing.T) {
 				assertBlock(t, got[cell(8, 8, 8)], stateBlock(t, name, map[string]string{
 					"signal_fire": test.signal, "facing": "west", "lit": "false", "waterlogged": "true",
 				}))
-				if len(runPass(f.campfireSignal, got, sectionNeighbours{})) != 0 {
+				if len(runPass(campfireTarget, f.campfireSignal, got, sectionNeighbours{})) != 0 {
 					t.Fatal("unchanged campfires were reported as changes")
 				}
 			})

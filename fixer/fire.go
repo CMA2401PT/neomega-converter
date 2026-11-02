@@ -14,7 +14,7 @@ func (f *Fixer) fireConnections(view snapshot) map[position]ir.IRBlock {
 	// 火的附着方向依赖邻居朝回当前格的面，保留状态中的燃烧年龄。
 	changes := make(map[position]ir.IRBlock)
 	properties, _ := java.BlockProperties("minecraft:fire")
-	for pos, block := range view.targetBlocks(fireTarget) {
+	for pos, block := range view.targetBlocks() {
 		states := block.States()
 		for _, direction := range [...]struct {
 			name string

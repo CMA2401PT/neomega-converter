@@ -26,7 +26,7 @@ func connectionTarget(block ir.IRBlock) bool {
 func (f *Fixer) connections(view snapshot) map[position]ir.IRBlock {
 	// 栅栏与玻璃板共享四向遍历，连接条件仍按各自的方块类别判断。
 	changes := make(map[position]ir.IRBlock)
-	for pos, block := range view.targetBlocks(connectionTarget) {
+	for pos, block := range view.targetBlocks() {
 		name := block.ShortName()
 		fence := isFence(name)
 		properties, _ := java.BlockProperties(block.NameWithNameSpace())

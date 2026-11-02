@@ -1,6 +1,7 @@
 package fixer
 
 import (
+	"maps"
 	"testing"
 
 	"celler"
@@ -22,7 +23,11 @@ func TestFilteredPassesMatchFullScan(t *testing.T) {
 		full.passes[index] = pass{
 			cares: func(ir.IRBlock) bool { return true },
 			run: func(view snapshot) map[position]ir.IRBlock {
-				view.targets = nil
+				targets, expected := fullScanTargets(view, original.cares)
+				view.targets = targets
+				if !maps.Equal(maps.Collect(view.targetBlocks()), expected) {
+					t.Fatalf("pass %d target iteration differs from full scan", index)
+				}
 				changes := original.run(view)
 				changedByPass[index] += len(changes)
 				return changes
@@ -58,6 +63,29 @@ func TestFilteredPassesMatchFullScan(t *testing.T) {
 			t.Fatalf("fixture did not exercise changes from pass %d", index)
 		}
 	}
+}
+
+func fullScanTargets(
+	view snapshot,
+	cares func(ir.IRBlock) bool,
+) (map[int32][]bool, map[position]ir.IRBlock) {
+	// 逐格判断作为独立对照，同时记录预期格子，验证索引迭代没有漏取或多取。
+	targets := make(map[int32][]bool)
+	blocks := make(map[position]ir.IRBlock)
+	for y, section := range view.sections {
+		indices := make([]bool, section.LastPaletteIdx+1)
+		for index := range 4096 {
+			local := layer_storage.At(index>>8, index&15, index>>4&15)
+			block := section.Get(local)
+			if cares(block) {
+				indices[section.GetIndex(local)] = true
+				pos := position{x: int(local.X), y: int(y)*16 + int(local.Y), z: int(local.Z)}
+				blocks[pos] = block
+			}
+		}
+		targets[y] = indices
+	}
+	return targets, blocks
 }
 
 func mixedTargetChunk(t *testing.T, pos celler.ChunkPos) *converter.ConvertedChunk {
@@ -154,10 +182,7 @@ func TestPassTargetsRefreshBetweenPasses(t *testing.T) {
 			cares: func(block ir.IRBlock) bool { return block == stone },
 			run: func(view snapshot) map[position]ir.IRBlock {
 				count := 0
-				for pos, block := range view.targetBlocks(func(ir.IRBlock) bool {
-					t.Fatal("target predicate called per cell")
-					return false
-				}) {
+				for pos, block := range view.targetBlocks() {
 					count++
 					if pos != (position{x: 2, y: 3, z: 4}) || block != stone {
 						t.Fatalf("unexpected target %v %s", pos, block)

@@ -54,7 +54,7 @@ type snapshot struct {
 }
 
 type pass struct {
-	// 状态判断供调色板筛选和逐格遍历共用，修复仍先收齐整根柱子的改动。
+	// 筛选由驱动统一完成，规则只接收当前轮目标，先收齐整根柱子的改动。
 	cares func(ir.IRBlock) bool
 	run   func(snapshot) map[position]ir.IRBlock
 }
@@ -227,32 +227,9 @@ func getter(grid map[sectionKey]*layer_storage.Palette[ir.IRBlock]) blockGetter 
 	}
 }
 
-func (view snapshot) blocks(yield func(position, ir.IRBlock) bool) {
-	// 逐格参考路径只读中心已有数据，供测试与目标索引路径对照。
-	for y, section := range view.sections {
-		if section == nil {
-			continue
-		}
-		for index := range 4096 {
-			pos := position{x: index >> 8, y: int(y)*16 + (index & 15), z: index >> 4 & 15}
-			if !yield(pos, section.Get(layer_storage.At(pos.x, pos.y, pos.z))) {
-				return
-			}
-		}
-	}
-}
-
-func (view snapshot) targetBlocks(cares func(ir.IRBlock) bool) iter.Seq2[position, ir.IRBlock] {
-	// 未提供目标索引时保留逐格路径，供测试对照旧行为；正常修复只取命中索引的状态。
+func (view snapshot) targetBlocks() iter.Seq2[position, ir.IRBlock] {
+	// 只读取驱动为当前轮选出的目标，避免规则重复指定筛选条件。
 	return func(yield func(position, ir.IRBlock) bool) {
-		if view.targets == nil {
-			for pos, block := range view.blocks {
-				if cares(block) && !yield(pos, block) {
-					return
-				}
-			}
-			return
-		}
 		for y, indices := range view.targets {
 			section := view.sections[y]
 			for index := range 4096 {

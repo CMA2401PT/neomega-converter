@@ -61,7 +61,7 @@ viewer 在调用边界处理 hash 与状态的转换。
 判断按调色板做，不逐格做，每个 pass 前重新算，因为上一个 pass 可能已经改了状态。
 树叶 pass 的 `cares` 同时包含原木：原木是距离的起点，常常独占树叶下方的另一个 section。
 
-加一类新修复，就写一对 `cares` 和 `run` 函数，在 `New()` 的 `f.passes` 列表里登记。`run` 内部用 `view.targetBlocks(cares)` 遍历目标格，筛选条件只写在 `cares` 一处。列表顺序就是
+加一类新修复，就写一对 `cares` 和 `run` 函数，在 `New()` 的 `f.passes` 列表里登记。`run` 内部用 `view.targetBlocks()` 遍历驱动已筛选的目标格，无需再次指定筛选函数。列表顺序就是
 执行顺序。
 
 pass 判断「邻居那一面算不算实心」时查的是**实心表**（`neomega-blocks/presets/java/v1/solidtable` 内嵌的
