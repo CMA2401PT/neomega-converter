@@ -1,7 +1,9 @@
 # neomega-converter
 
+本模块位于工作区的 `apps/` 能力组装层，Go 模块名保持为 `neomega-converter`。
+
 本模块把 Bedrock → Java 转换与 Java 邻接属性修复组合起来，提供存档导出命令和按需浏览适配。
-转换来自 [neomega-converter-core](../neomega-converter-core/README.md)，修复规则来自 [viewer-core 的 fixer](../neomega-viewer-core/fixer/java-postprocess/README.md)。
+转换来自 [neomega-converter-core](../../neomega-converter-core/README.md)，修复规则来自 [viewer-core 的 fixer](../../neomega-viewer-core/fixer/java-postprocess/README.md)。
 两个 core 彼此不依赖，只有本模块同时使用它们。
 
 ## 三种组合入口
@@ -141,7 +143,7 @@ chunk, err := source.Chunk(ctx, celler.ChunkPos{X: 10, Z: -3})
 viewer 可以把取得的柱子适配成渲染 section。
 区域导出可以遍历所需坐标，把柱子传给 `export.ToJavaChunk` 和 `export.ToJavaEntities`。
 两种用途共用上述来源，邻居仍从原始 Bedrock 来源读取。
-转换和修复的语义及诊断含义见[转换核心说明](../neomega-converter-core/README.md)与[修复规则](../neomega-viewer-core/fixer/java-postprocess/FIXER.md)。
+转换和修复的语义及诊断含义见[转换核心说明](../../neomega-converter-core/README.md)与[修复规则](../../neomega-viewer-core/fixer/java-postprocess/FIXER.md)。
 
 ## 命令行导出
 
@@ -163,6 +165,6 @@ go build -o bedrock-to-java ./cmd/bedrock-to-java
 
 ## 检查
 
-在工作区根目录运行 `./check.sh neomega-converter-core neomega-converter`。
+在工作区根目录运行 `./check.sh neomega-converter-core apps/neomega-converter`。
 并发取消、原始邻居、缓存复用、修复写回和 CLI 都有对应测试。
 修复规则本身在 viewer-core 中验证。

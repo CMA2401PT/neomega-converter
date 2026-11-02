@@ -93,7 +93,7 @@ result, err := bed.Convert(blockentities.Input{
 ```
 
 `err!=nil` 表示规则执行失败，调用方保留 Base 状态。
-各规则的报错条件和降级见 [转换核心的能力一览](../neomega-converter-core/README.md#能力一览)。
+各规则的报错条件和降级见 [转换核心的能力一览](../../neomega-converter-core/README.md#能力一览)。
 
 ---
 

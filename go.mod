@@ -21,14 +21,14 @@ require (
 	neomega-viewer-core v0.0.0
 )
 
-replace celler => ../neomega-celler
+replace celler => ../../neomega-celler
 
-replace neomega-blocks => ../neomega-blocks
+replace neomega-blocks => ../../neomega-blocks
 
-replace neomega-converter-core => ../neomega-converter-core
+replace neomega-converter-core => ../../neomega-converter-core
 
-replace neomega-nbt => ../neomega-nbt
+replace neomega-nbt => ../../neomega-nbt
 
-replace neomega-packfs => ../neomega-packfs
+replace neomega-packfs => ../../neomega-packfs
 
-replace neomega-viewer-core => ../neomega-viewer-core
+replace neomega-viewer-core => ../../neomega-viewer-core
