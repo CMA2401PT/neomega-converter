@@ -163,22 +163,10 @@ fixed = fixer.Fix(converted, 空 ChunkNeighbours)
 section = fixed.Sections[0]
 ```
 
-**整图导出（不并发版）**：
+**整图导出**：用 `export` 包，两步互不依赖：
 ```
-for each chunk in world:
-    stage1[chunk.Pos] = ConvertChunk(chunk)
-
-for each chunk in world:
-    neighbours = 从 stage1 取 8 个邻居
-    fixed = fixer.Fix(stage1[chunk.Pos], neighbours)
-    writeJavaChunk(fixed)
-```
-
-**整图导出（fixer 可选，不想等邻居时）**：
-```
-for each chunk in world:
-    converted = ConvertChunk(chunk)
-    writeJavaChunk(converted)   // 栅栏等邻接状态不精确，但物品/颜色正确
+report = export.ConvertWorld(bedrockWorld, javaWorld, options)   // 不跑 fixer，写 PostProcessing
+fixReport = export.FixWorld(javaWorld, fixer, fixOptions)        // 可选，读回 Java 存档修复后写回
 ```
 
 ---
@@ -268,12 +256,16 @@ Java 的展示框不是方块，是实体，存放在 `entities/` 目录的 regi
 
 ---
 
-### 3.6 整图导出命令
+### 3.6 整图导出
 
-**现状**：`cmd/bedrock-to-java/main.go` 只有 package 声明，是留位。
+**现状**：已实现，见 README「export：导出 Java 存档」和「命令行导出」。
+转换和邻接修复是两个独立步骤，修复步骤读写的是已经写好的 Java 存档。
 
-**卡在哪**：不是卡住，只是还没做。需要把上面的转换流程串起来，
-加上并行调度、celler 的区块扫描、Java region 写出、level.dat 转换。
+**还缺的部分**：
+
+- 并行。两个步骤都是单线程。
+- 修复步骤按维度整体读进内存，大存档需要按区域分批，目前没有分批入口。
+- 写出格式没有在游戏里加载验证，待确认的字段见 README。
 
 ---
 

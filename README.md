@@ -26,6 +26,10 @@ bedrock.ConvertChunk(chunk)            Bedrock 整根柱子 → ConvertedChunk, 
 fixer.New()                            → *Fixer, err
 fixer.Fix(center, 8 个邻居)            ConvertedChunk → 修复后的 ConvertedChunk    （阶段 2）
 fixer.FixSection(palette, 6 个邻居)    单 section 的 Java 调色板 → 修复后的调色板
+export.ToJavaChunk / ToJavaEntities    ConvertedChunk → Java 区块 / Java 实体记录
+export.ConvertLevel(level)             Bedrock level.dat → Java level.dat
+export.ConvertWorld(src, dst, opts)    Bedrock 存档 → Java 存档，不跑 fixer          （导出第 1 步）
+export.FixWorld(world, fixer, opts)    已写好的 Java 存档 → 修复邻接状态后写回       （导出第 2 步）
 ```
 
 这些入口都在本模块；`ConvertState` 内部使用 `neomega-blocks/presets/block-converts/v1` 的两个函数。
@@ -195,8 +199,44 @@ f.FixSection(palette, [6]neighbour) → palette        邻居顺序 west/east/do
 邻居必须取阶段 1 结果，不能取别的柱子修复后的结果。
 `ScanChunks` 会给出所有维度的柱子，调用方按 `Dimension` 区分。
 
-还没有的能力：生物群系、普通实体、Java 存档写出适配和 `level.dat` 转换。
-导出这一侧的计划见 [HANDOFF-export.md](HANDOFF-export.md)。
+整图导出不用自己写这个循环，见下一节的 `export` 包。
+
+### export：导出 Java 存档
+
+存档到存档分成两个互不依赖的步骤。
+fixer 每根柱子要读 8 个邻居，必须把整个维度放进内存，和逐根柱子流式进行的转换差别很大，所以单独成一步。
+第 2 步只读磁盘上的 Java 存档，也可以对别的来源的 Java 存档运行。
+
+```text
+第 1 步  ConvertWorld(bedrockWorld, javaWorld, {Dimensions, Strict}) → (Report, err)
+  逐根柱子：ScanChunks → ConvertChunk → ToJavaChunk / ToJavaEntities → 写 region / entities
+  不跑 fixer；需要按邻居重算形状的格子登记进 PostProcessing，游戏加载区块时重算
+    登记：栅栏、栅栏门、玻璃板、铁栏杆、楼梯、墙、红石线、绊线、紫颂植物
+    其余方块不登记：重算会让缺支撑的方块掉落
+  err：Strict 时第一根 ConvertChunk 失败的柱子；写盘失败
+  Report：每个维度的柱子数、失败的柱子、各诊断种类合计、未知状态前 10、
+          不支持的方块实体按 id 合计、超出 Java 高度被丢弃的 section 数、方块实体数、实体数
+
+第 2 步  FixWorld(javaWorld, fixer, {Dimensions}) → (FixReport, err)
+  把一个维度所有柱子的方块读进内存 → 每根柱子 Fix（邻居取读入的原值）→ 全部算完后只写回有改动的 section
+  写回时保留 section 的其他 NBT 和区块的其他字段
+```
+
+写出的 Java 区块：
+
+```text
+ToJavaChunk(ConvertedChunk, 4189) → java.Chunk
+  Status=minecraft:full，yPos 为维度最低 section，isLightOn=0，Heightmaps 为空
+  超出目标高度的 section 丢弃（主世界 -4..19，下界和末地 0..15）
+  waterlogged 原样写出；Java 不能含水的方块上的 waterlogged，游戏加载时会丢掉
+ToJavaEntities(ConvertedChunk, 4189) → {DataVersion, Position, Entities} 或 nil（没有实体）
+ConvertLevel(Level, 4189) → (level.dat, LevelReport, err)
+  从 Bedrock 取 LevelName、SpawnX/Y/Z、RandomSeed、GameType、Difficulty、Time、commandsAllowed
+  取不到或类型不对时用 Java 默认值，并列进 LevelReport.DefaultedFields
+  Time 同时写进 Time 和 DayTime；WorldGenSettings 写原版三维度生成器，种子取 RandomSeed
+```
+
+没有在游戏里验证的：空 Heightmaps 和 `isLightOn=0` 是否让游戏重算高度图和光照，PostProcessing 是否按预期重算形状，`level.dat` 能否直接打开。
 
 ## 阶段 1：转换源区块
 
@@ -277,7 +317,7 @@ hash 是由完整方块状态计算的数值标识。
 | 生物群系 | | `bedrock/biomes` |
 | 方块实体要变成 Java 实体 | 展示框 | `bedrock/blockentities/<子包>`，在 `Result.Entity` 里返回 |
 | 普通实体 | 生物、盔甲架 | `bedrock/actors` |
-| 世界元数据、存档写出 | `level.dat`、region | `cmd/bedrock-to-java` |
+| 世界元数据、存档写出 | `level.dat`、region、PostProcessing 名单 | `export/` |
 
 方块实体规则通过 `blockentities.Input` 读取基础状态和源 NBT。
 规则返回的 `Result` 总是包含状态，附加实体可以为 nil。
@@ -291,7 +331,7 @@ hash 是由完整方块状态计算的数值标识。
 范围、文字近似转换和映射数据来源见 [items 包说明](bedrock/items/doc.go)。
 
 需要按请求读取并缓存区块时，`adapt.OnDemandConverter` 是预留的适配类型。
-`bedrock/biomes`、`bedrock/actors` 和存档命令入口也只预留职责。
+`bedrock/biomes`、`bedrock/actors` 也只预留职责。
 
 ## 用法
 
@@ -381,6 +421,28 @@ cp -R ../resource/基岩版/db "$fixture_tmp/brdb"
 go run ./bedrock/testdata/generate.go -db "$fixture_tmp/brdb"
 go test ./bedrock -run TestSavedSubchunk -v
 ```
+
+## 命令行导出
+
+`cmd/bedrock-to-java` 把上面的两个导出步骤接成命令。
+LevelDB 打开时可能写文件，所以要对 Bedrock 存档的副本运行。
+
+```sh
+go build -o bedrock-to-java ./cmd/bedrock-to-java
+
+# 第 1 步；加 -fix 时接着跑第 2 步
+./bedrock-to-java -input <Bedrock 世界副本> -output <新建或空的目录> [-dims 0,1,2] [-fix] [-strict]
+
+# 只跑第 2 步，对已有的 Java 世界
+./bedrock-to-java -fix-only -output <Java 世界> [-dims 0,1,2]
+```
+
+`-dims` 是 Bedrock 维度编号，默认只导出主世界。
+命令结束时打印两步的报告，一行一个数字。
+
+对一份 572 MB 的主世界存档（195364 根柱子），在开发机上第 1 步用 3 分 39 秒、峰值内存约 50 MB，
+第 2 步用 22 分 33 秒、峰值内存约 8 GB，改动了 83558 个 section。
+第 2 步的内存随柱子数线性增长，更大的存档需要按区域分批修复。
 
 ## 实心表从哪里来
 
