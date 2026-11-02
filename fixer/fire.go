@@ -5,14 +5,16 @@ import (
 	java "neomega-blocks/presets/java/v1"
 )
 
+func fireTarget(block ir.IRBlock) bool {
+	// 灵魂火没有这组附着属性。
+	return block.NameWithNameSpace() == "minecraft:fire"
+}
+
 func (f *Fixer) fireConnections(view snapshot) map[position]ir.IRBlock {
 	// 火的附着方向依赖邻居朝回当前格的面，保留状态中的燃烧年龄。
 	changes := make(map[position]ir.IRBlock)
 	properties, _ := java.BlockProperties("minecraft:fire")
-	for pos, block := range view.blocks {
-		if block.NameWithNameSpace() != "minecraft:fire" {
-			continue
-		}
+	for pos, block := range view.targetBlocks(fireTarget) {
 		states := block.States()
 		for _, direction := range [...]struct {
 			name string

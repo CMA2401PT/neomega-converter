@@ -6,18 +6,28 @@ import (
 	"neomega-blocks/ir"
 )
 
+func plantTarget(block ir.IRBlock) bool {
+	// 头部和茎都需参与，方向表同时决定是否属于这四种植物。
+	return plantDirection(block) != 0
+}
+
+func plantDirection(block ir.IRBlock) int {
+	// 名称可在修复中互换，去掉茎后缀后共用生长方向。
+	switch strings.TrimSuffix(block.NameWithNameSpace(), "_plant") {
+	case "minecraft:kelp", "minecraft:twisting_vines":
+		return 1
+	case "minecraft:weeping_vines", "minecraft:cave_vines":
+		return -1
+	default:
+		return 0
+	}
+}
+
 func (f *Fixer) plantHeads(view snapshot) map[position]ir.IRBlock {
 	changes := make(map[position]ir.IRBlock)
-	for pos, block := range view.blocks {
+	for pos, block := range view.targetBlocks(plantTarget) {
 		kind := strings.TrimSuffix(block.NameWithNameSpace(), "_plant")
-		dy := 1
-		switch kind {
-		case "minecraft:kelp", "minecraft:twisting_vines":
-		case "minecraft:weeping_vines", "minecraft:cave_vines":
-			dy = -1
-		default:
-			continue
-		}
+		dy := plantDirection(block)
 		other, exists := view.get(pos.x, pos.y+dy, pos.z)
 		name := kind
 		if exists && strings.TrimSuffix(other.NameWithNameSpace(), "_plant") == kind {

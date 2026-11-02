@@ -1,7 +1,9 @@
 package export
 
 import (
+	"cmp"
 	"errors"
+	"slices"
 
 	"celler"
 	"celler/java"
@@ -23,90 +25,153 @@ type FixReport struct {
 	ChangedSections uint64
 }
 
-type chunkChanges struct {
-	// 延迟写回只保留改动调色板，原始世界始终是所有修复调用的邻居来源。
-	dimension java.Dimension
-	pos       celler.ChunkPos
-	sections  map[int32]*layer_storage.Palette[ir.IRBlock]
+type fixRow struct {
+	// 行只保存坐标，方块数据由三行窗口按需持有。
+	z         int32
+	positions []celler.ChunkPos
 }
 
 func FixWorld(world *java.World, f *fixer.Fixer, options FixOptions) (report FixReport, err error) {
-	// 全部修复成功前不写回，避免某个柱子的结果影响后面的邻居判断。
+	// 窗口保留写回前的原值，使逐柱写回不会改变后续修复的邻居。
 	defer func() { err = errors.Join(err, world.Flush()) }()
 	dimensions := options.Dimensions
 	if len(dimensions) == 0 {
 		dimensions = []java.Dimension{java.Overworld}
 	}
-	var changes []chunkChanges
 	seen := make(map[java.Dimension]bool)
 	for _, dim := range dimensions {
 		if seen[dim] {
 			continue
 		}
 		seen[dim] = true
-		chunks := make(map[celler.ChunkPos]*converter.ConvertedChunk)
 		var positions []celler.ChunkPos
 		err = world.Scan(dim, java.Terrain, func(pos celler.ChunkPos) error {
-			chunk, err := world.ReadChunk(dim, pos)
-			if err != nil {
-				return err
-			}
-			ys, err := chunk.SectionYs()
-			if err != nil {
-				return err
-			}
-			blocks := &converter.ConvertedChunk{Pos: pos, Sections: make(map[int32]*converter.ConvertedSection)}
-			for _, y := range ys {
-				section, err := chunk.Section(y)
-				if err != nil {
-					return err
-				}
-				if section.Blocks != nil {
-					blocks.Sections[y] = &converter.ConvertedSection{Blocks: section.Blocks}
-				}
-			}
-			chunks[pos] = blocks
 			positions = append(positions, pos)
-			report.Chunks++
 			return nil
 		})
 		if err != nil {
 			return report, err
 		}
-		for _, pos := range positions {
-			center := chunks[pos]
-			var neighbours fixer.ChunkNeighbours
-			for side, offset := range [8][2]int32{{-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}} {
-				neighbours[side] = chunks[celler.ChunkPos{X: pos.X + offset[0], Z: pos.Z + offset[1]}]
+		slices.SortFunc(positions, func(a, b celler.ChunkPos) int {
+			if order := cmp.Compare(a.Z, b.Z); order != 0 {
+				return order
 			}
-			fixed := f.Fix(center, neighbours)
-			changed := chunkChanges{dimension: dim, pos: pos, sections: make(map[int32]*layer_storage.Palette[ir.IRBlock])}
-			for y, section := range fixed.Sections {
-				if section.Blocks != center.Sections[y].Blocks {
-					changed.sections[y] = section.Blocks
+			return cmp.Compare(a.X, b.X)
+		})
+		var rows []fixRow
+		for start := 0; start < len(positions); {
+			end := start + 1
+			for end < len(positions) && positions[end].Z == positions[start].Z {
+				end++
+			}
+			rows = append(rows, fixRow{z: positions[start].Z, positions: positions[start:end]})
+			start = end
+		}
+		window := make(map[int32]map[celler.ChunkPos]*converter.ConvertedChunk)
+		nextRow := 0
+		for _, row := range rows {
+			// 稀疏存档可能跳过若干 z；先淘汰过期行，加载游标只向前，绝不重读已写回行。
+			for z := range window {
+				if z < row.z-1 {
+					delete(window, z)
 				}
 			}
-			if len(changed.sections) > 0 {
-				changes = append(changes, changed)
+			for nextRow < len(rows) && rows[nextRow].z <= row.z+1 {
+				incoming := rows[nextRow]
+				chunks := make(map[celler.ChunkPos]*converter.ConvertedChunk, len(incoming.positions))
+				window[incoming.z] = chunks
+				for _, pos := range incoming.positions {
+					blocks, err := readFixBlocks(world, dim, pos)
+					if err != nil {
+						return report, err
+					}
+					chunks[pos] = blocks
+					report.Chunks++
+				}
+				nextRow++
 			}
-		}
-	}
-	for _, change := range changes {
-		chunk, err := world.ReadChunk(change.dimension, change.pos)
-		if err != nil {
-			return report, err
-		}
-		for y, blocks := range change.sections {
-			if err = replaceBlocks(chunk, y, blocks); err != nil {
-				return report, err
+			for _, pos := range row.positions {
+				center := window[row.z][pos]
+				var neighbours fixer.ChunkNeighbours
+				for side, offset := range [8][2]int32{
+					{-1, -1}, {0, -1}, {1, -1}, {-1, 0},
+					{1, 0}, {-1, 1}, {0, 1}, {1, 1},
+				} {
+					neighbours[side] = window[pos.Z+offset[1]][celler.ChunkPos{
+						X: pos.X + offset[0], Z: pos.Z + offset[1],
+					}]
+				}
+				fixed := f.Fix(center, neighbours)
+				changed, err := writeFixedBlocks(world, dim, center, fixed)
+				if err != nil {
+					return report, err
+				}
+				report.ChangedSections += changed
 			}
+			delete(window, row.z-1)
 		}
-		if err = world.WriteChunk(change.dimension, chunk); err != nil {
-			return report, err
-		}
-		report.ChangedSections += uint64(len(change.sections))
 	}
 	return report, nil
+}
+
+func readFixBlocks(
+	world *java.World,
+	dim java.Dimension,
+	pos celler.ChunkPos,
+) (*converter.ConvertedChunk, error) {
+	// 窗口只持有方块调色板，完整 NBT 留到实际写回时重新读取。
+	chunk, err := world.ReadChunk(dim, pos)
+	if err != nil {
+		return nil, err
+	}
+	ys, err := chunk.SectionYs()
+	if err != nil {
+		return nil, err
+	}
+	blocks := &converter.ConvertedChunk{Pos: pos, Sections: make(map[int32]*converter.ConvertedSection)}
+	for _, y := range ys {
+		section, err := chunk.Section(y)
+		if err != nil {
+			return nil, err
+		}
+		if section.Blocks != nil {
+			blocks.Sections[y] = &converter.ConvertedSection{Blocks: section.Blocks}
+		}
+	}
+	return blocks, nil
+}
+
+func writeFixedBlocks(
+	world *java.World,
+	dim java.Dimension,
+	center *converter.ConvertedChunk,
+	fixed *converter.ConvertedChunk,
+) (uint64, error) {
+	// 惰性重读保留未修改的 NBT，写回对象不进入原值窗口。
+	var chunk *java.Chunk
+	var changed uint64
+	for y, section := range fixed.Sections {
+		if section.Blocks == center.Sections[y].Blocks {
+			continue
+		}
+		if chunk == nil {
+			var err error
+			chunk, err = world.ReadChunk(dim, center.Pos)
+			if err != nil {
+				return 0, err
+			}
+		}
+		if err := replaceBlocks(chunk, y, section.Blocks); err != nil {
+			return 0, err
+		}
+		changed++
+	}
+	if chunk != nil {
+		if err := world.WriteChunk(dim, chunk); err != nil {
+			return 0, err
+		}
+	}
+	return changed, nil
 }
 
 func replaceBlocks(chunk *java.Chunk, y int32, blocks *layer_storage.Palette[ir.IRBlock]) error {

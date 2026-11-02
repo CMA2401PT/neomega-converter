@@ -19,13 +19,15 @@ var stairDirections = map[string]stairDirection{
 	"south": {x: 0, z: 1, side: 5},
 }
 
+func stairTarget(block ir.IRBlock) bool {
+	// 仅楼梯需要按前后伙伴重新计算拐角。
+	return strings.HasSuffix(block.ShortName(), "_stairs")
+}
+
 func (f *Fixer) stairShapes(view snapshot) map[position]ir.IRBlock {
 	// 楼梯朝向和上下半部保持原值，只根据前后伙伴补全拐角。
 	changes := make(map[position]ir.IRBlock)
-	for pos, block := range view.blocks {
-		if !strings.HasSuffix(block.ShortName(), "_stairs") {
-			continue
-		}
+	for pos, block := range view.targetBlocks(stairTarget) {
 		states := block.States()
 		facing, _ := states.Get("facing")
 		facingName, ok := facing.(string)
@@ -56,7 +58,7 @@ func stairShape(get blockGetter, pos position, facing stairDirection, half any) 
 		{side: facing.side ^ 1, left: "inner_left", right: "inner_right"},
 	} {
 		other, _ := neighbour(get, pos, candidate.side)
-		if !strings.HasSuffix(other.ShortName(), "_stairs") {
+		if !stairTarget(other) {
 			continue
 		}
 		otherHalf, _ := other.States().Get("half")

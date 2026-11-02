@@ -175,13 +175,19 @@ func TestPassesAccumulate(t *testing.T) {
 	fence := stateBlock(t, "oak_fence", nil)
 	third, fourth := position{y: 3}, position{y: 4}
 	f := &Fixer{passes: []pass{
-		func(view snapshot) map[position]ir.IRBlock {
-			return map[position]ir.IRBlock{third: stone}
+		{
+			cares: func(ir.IRBlock) bool { return true },
+			run: func(view snapshot) map[position]ir.IRBlock {
+				return map[position]ir.IRBlock{third: stone}
+			},
 		},
-		func(view snapshot) map[position]ir.IRBlock {
-			current, _ := view.get(0, 3, 0)
-			assertBlock(t, current, stone)
-			return map[position]ir.IRBlock{third: fence, fourth: current}
+		{
+			cares: func(ir.IRBlock) bool { return true },
+			run: func(view snapshot) map[position]ir.IRBlock {
+				current, _ := view.get(0, 3, 0)
+				assertBlock(t, current, stone)
+				return map[position]ir.IRBlock{third: fence, fourth: current}
+			},
 		},
 	}}
 	got := fixSection(f, chunk, sectionNeighbours{})

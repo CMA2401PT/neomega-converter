@@ -4,6 +4,11 @@ import (
 	"neomega-blocks/ir"
 )
 
+func redstoneTarget(block ir.IRBlock) bool {
+	// 其他红石元件只能作为邻居，不能套用连线规则。
+	return block.NameWithNameSpace() == "minecraft:redstone_wire"
+}
+
 func (f *Fixer) redstoneConnections(view snapshot) map[position]ir.IRBlock {
 	// 只修能排除元件和坡道的平面连线，缺失数据时保留原有形状。
 	changes := make(map[position]ir.IRBlock)
@@ -18,10 +23,7 @@ func (f *Fixer) redstoneConnections(view snapshot) map[position]ir.IRBlock {
 		{name: "south", side: 5, z: 1},
 	}
 wireLoop:
-	for pos, block := range view.blocks {
-		if block.NameWithNameSpace() != "minecraft:redstone_wire" {
-			continue
-		}
+	for pos, block := range view.targetBlocks(redstoneTarget) {
 		x, y, z := pos.x, pos.y, pos.z
 		var connected [4]bool
 		count, single := 0, 0

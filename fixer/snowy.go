@@ -11,14 +11,17 @@ var snowBlocks = map[string]bool{
 	"minecraft:powder_snow": true,
 }
 
+func snowyTarget(block ir.IRBlock) bool {
+	// 按属性而非名称筛选，保留所有带 snowy 状态的输入语义。
+	_, found := block.States().Get("snowy")
+	return found
+}
+
 func (f *Fixer) snowyGround(view snapshot) map[position]ir.IRBlock {
 	// snowy 由上方一格唯一决定，往返丢失后按原版规则重算即可。
 	changes := make(map[position]ir.IRBlock)
-	for pos, block := range view.blocks {
+	for pos, block := range view.targetBlocks(snowyTarget) {
 		states := block.States()
-		if _, found := states.Get("snowy"); !found {
-			continue
-		}
 		above, _ := neighbour(view.get, pos, 3)
 		snowy := snowBlocks[above.NameWithNameSpace()]
 		states = states.Set("snowy", map[bool]string{true: "true", false: "false"}[snowy])

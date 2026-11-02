@@ -1,6 +1,7 @@
 package fixer
 
 import (
+	"iter"
 	"maps"
 
 	"celler/layer_storage"
@@ -45,15 +46,18 @@ type blockGetter func(x, y, z int) (ir.IRBlock, bool)
 // 缺数据时返回空气及 false，让红石规则保留无法排除坡道的状态。
 
 type snapshot struct {
-	// 每个 pass 读取同一份中心快照，实心面缓存属于一次修复调用。
+	// 中心随 pass 更新，邻居保留输入原值；目标索引仅属于当前 pass。
 	sections map[int32]*layer_storage.Palette[ir.IRBlock]
 	get      blockGetter
 	solid    map[ir.IRBlock]uint8
+	targets  map[int32][]bool
 }
 
-type pass func(snapshot) map[position]ir.IRBlock
-
-// 改动先覆盖整根中心柱子，再统一应用，避免 section 遍历顺序影响结果。
+type pass struct {
+	// 状态判断供调色板筛选和逐格遍历共用，修复仍先收齐整根柱子的改动。
+	cares func(ir.IRBlock) bool
+	run   func(snapshot) map[position]ir.IRBlock
+}
 
 type Fixer struct {
 	// 规则和实心表只读共享，调用中的状态与缓存由各次修复独立持有。
@@ -69,16 +73,16 @@ func New() (*Fixer, error) {
 	}
 	f := &Fixer{solid: solid}
 	f.passes = []pass{
-		f.connections,
-		f.fireConnections,
-		f.stairShapes,
-		f.doorHalves,
-		f.snowyGround,
-		f.redstoneConnections,
-		f.leafDistances,
-		f.plantHeads,
-		f.campfireSignal,
-		f.noteBlockInstrument,
+		{cares: connectionTarget, run: f.connections},
+		{cares: fireTarget, run: f.fireConnections},
+		{cares: stairTarget, run: f.stairShapes},
+		{cares: doorTarget, run: f.doorHalves},
+		{cares: snowyTarget, run: f.snowyGround},
+		{cares: redstoneTarget, run: f.redstoneConnections},
+		{cares: leafTarget, run: f.leafDistances},
+		{cares: plantTarget, run: f.plantHeads},
+		{cares: campfireTarget, run: f.campfireSignal},
+		{cares: noteBlockTarget, run: f.noteBlockInstrument},
 	}
 	return f, nil
 }
@@ -163,11 +167,15 @@ func (f *Fixer) run(
 	sections map[int32]*layer_storage.Palette[ir.IRBlock],
 	grid map[sectionKey]*layer_storage.Palette[ir.IRBlock],
 ) {
-	// 首次写入才复制调色板；一轮所有改动收齐后，下一轮才读到新的中心状态。
+	// 每轮按最新中心调色板重新选目标；首次写入才复制，收齐改动后统一应用。
 	view := snapshot{sections: sections, get: getter(grid), solid: make(map[ir.IRBlock]uint8)}
 	owned := make(map[int32]bool)
-	for _, run := range f.passes {
-		changes := run(view)
+	for _, pass := range f.passes {
+		view.targets = selectTargets(sections, pass.cares)
+		if len(view.targets) == 0 {
+			continue
+		}
+		changes := pass.run(view)
 		for pos, state := range changes {
 			y := int32(pos.y >> 4)
 			if !owned[y] {
@@ -182,6 +190,32 @@ func (f *Fixer) run(
 	}
 }
 
+func selectTargets(
+	sections map[int32]*layer_storage.Palette[ir.IRBlock],
+	cares func(ir.IRBlock) bool,
+) map[int32][]bool {
+	// 同一完整状态跨 section 复用判断；每轮重建索引，避免沿用已改名或扩容的调色板。
+	targets := make(map[int32][]bool)
+	cache := make(map[ir.IRBlock]bool)
+	for y, section := range sections {
+		indices := make([]bool, section.LastPaletteIdx+1)
+		active := false
+		for index, block := range section.Palette[:section.LastPaletteIdx+1] {
+			matches, known := cache[block]
+			if !known {
+				matches = cares(block)
+				cache[block] = matches
+			}
+			indices[index] = matches
+			active = active || matches
+		}
+		if active {
+			targets[y] = indices
+		}
+	}
+	return targets
+}
+
 func getter(grid map[sectionKey]*layer_storage.Palette[ir.IRBlock]) blockGetter {
 	// 算术右移与低四位同时支持负高度和跨区块坐标，两个入口共用这条寻址路径。
 	return func(x, y, z int) (ir.IRBlock, bool) {
@@ -194,7 +228,7 @@ func getter(grid map[sectionKey]*layer_storage.Palette[ir.IRBlock]) blockGetter 
 }
 
 func (view snapshot) blocks(yield func(position, ir.IRBlock) bool) {
-	// 只遍历中心已有数据，邻居仅通过取格函数参与规则判断。
+	// 逐格参考路径只读中心已有数据，供测试与目标索引路径对照。
 	for y, section := range view.sections {
 		if section == nil {
 			continue
@@ -203,6 +237,34 @@ func (view snapshot) blocks(yield func(position, ir.IRBlock) bool) {
 			pos := position{x: index >> 8, y: int(y)*16 + (index & 15), z: index >> 4 & 15}
 			if !yield(pos, section.Get(layer_storage.At(pos.x, pos.y, pos.z))) {
 				return
+			}
+		}
+	}
+}
+
+func (view snapshot) targetBlocks(cares func(ir.IRBlock) bool) iter.Seq2[position, ir.IRBlock] {
+	// 未提供目标索引时保留逐格路径，供测试对照旧行为；正常修复只取命中索引的状态。
+	return func(yield func(position, ir.IRBlock) bool) {
+		if view.targets == nil {
+			for pos, block := range view.blocks {
+				if cares(block) && !yield(pos, block) {
+					return
+				}
+			}
+			return
+		}
+		for y, indices := range view.targets {
+			section := view.sections[y]
+			for index := range 4096 {
+				local := layer_storage.At(index>>8, index&15, index>>4&15)
+				paletteIndex := section.GetIndex(local)
+				if !indices[paletteIndex] {
+					continue
+				}
+				pos := position{x: int(local.X), y: int(y)*16 + int(local.Y), z: int(local.Z)}
+				if !yield(pos, section.Palette[paletteIndex]) {
+					return
+				}
 			}
 		}
 	}

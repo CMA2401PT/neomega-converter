@@ -66,26 +66,31 @@ func TestChunkNeighbourCoordinates(t *testing.T) {
 		neighbours[side] = &converter.ConvertedChunk{Sections: map[int32]*converter.ConvertedSection{-2: {Blocks: blocks}}}
 	}
 	center := &converter.ConvertedChunk{Sections: map[int32]*converter.ConvertedSection{-2: {Blocks: palette(airChunk(t))}}}
-	f := &Fixer{passes: []pass{func(view snapshot) map[position]ir.IRBlock {
-		for side, pos := range positions {
-			got, exists := view.get(pos.x, pos.y, pos.z)
-			if !exists {
-				t.Fatalf("missing neighbour %d", side)
-			}
-			assertBlock(t, got, stateBlock(t, names[side], nil))
-		}
-		got, exists := view.get(0, -17, 0)
-		if !exists {
-			t.Fatal("stored air marked missing")
-		}
-		assertBlock(t, got, "minecraft:air []")
-		got, exists = view.get(0, -1, 0)
-		if exists {
-			t.Fatal("missing section marked present")
-		}
-		assertBlock(t, got, "minecraft:air []")
-		return nil
-	}}}
+	f := &Fixer{passes: []pass{
+		{
+			cares: func(ir.IRBlock) bool { return true },
+			run: func(view snapshot) map[position]ir.IRBlock {
+				for side, pos := range positions {
+					got, exists := view.get(pos.x, pos.y, pos.z)
+					if !exists {
+						t.Fatalf("missing neighbour %d", side)
+					}
+					assertBlock(t, got, stateBlock(t, names[side], nil))
+				}
+				got, exists := view.get(0, -17, 0)
+				if !exists {
+					t.Fatal("stored air marked missing")
+				}
+				assertBlock(t, got, "minecraft:air []")
+				got, exists = view.get(0, -1, 0)
+				if exists {
+					t.Fatal("missing section marked present")
+				}
+				assertBlock(t, got, "minecraft:air []")
+				return nil
+			},
+		},
+	}}
 	fixed := f.Fix(center, neighbours)
 	if fixed == center || fixed.Sections[-2] != center.Sections[-2] {
 		t.Fatal("unchanged chunk must retain its section")

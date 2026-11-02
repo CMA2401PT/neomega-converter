@@ -27,7 +27,11 @@ func fixSection(f *Fixer, blocks []ir.IRBlock, neighbours sectionNeighbours) []i
 	return result.Data
 }
 
-func runPass(run pass, blocks []ir.IRBlock, neighbours sectionNeighbours) map[int]ir.IRBlock {
+func runPass(
+	run func(snapshot) map[position]ir.IRBlock,
+	blocks []ir.IRBlock,
+	neighbours sectionNeighbours,
+) map[int]ir.IRBlock {
 	section := palette(blocks)
 	grid := map[sectionKey]*layer_storage.Palette[ir.IRBlock]{{}: section}
 	for side, values := range neighbours {

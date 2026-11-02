@@ -7,14 +7,24 @@ import (
 	"neomega-blocks/ir"
 )
 
+func leafTarget(block ir.IRBlock) bool {
+	// 原木即使独占一个 section 也必须激活，才能作为跨 section 传播的起点。
+	return isLeaf(block) || isLog(block.ShortName())
+}
+
+func isLeaf(block ir.IRBlock) bool {
+	// 玩家树叶也参与距离传播，persistent 只在写回时决定是否修改。
+	return strings.HasSuffix(block.ShortName(), "_leaves")
+}
+
 func (f *Fixer) leafDistances(view snapshot) map[position]ir.IRBlock {
 	// 只收集中心柱子的原木和树叶，让传播自然止于已有 section。
 	leaves := make(map[position]ir.IRBlock)
 	distances := make(map[position]int)
 	var queue []position
-	for pos, block := range view.blocks {
+	for pos, block := range view.targetBlocks(leafTarget) {
 		name := block.ShortName()
-		if strings.HasSuffix(name, "_leaves") {
+		if isLeaf(block) {
 			leaves[pos] = block
 		} else if isLog(name) {
 			distances[pos] = 0
