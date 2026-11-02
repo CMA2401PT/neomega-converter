@@ -26,6 +26,8 @@ bedrock.ConvertChunk(chunk)            Bedrock 整根柱子 → ConvertedChunk, 
 fixer.New()                            → *Fixer, err
 fixer.Fix(center, 8 个邻居)            ConvertedChunk → 修复后的 ConvertedChunk    （阶段 2）
 fixer.FixSection(palette, 6 个邻居)    单 section 的 Java 调色板 → 修复后的调色板
+adapt.NewConverted(read, opts)        按坐标读取 Bedrock 柱子 → 缓存阶段 1 的来源
+adapt.NewFixed(converted, fixer, opts) 阶段 1 来源 → 缓存修复结果的来源
 export.ToJavaChunk / ToJavaEntities    ConvertedChunk → Java 区块 / Java 实体记录
 export.ConvertLevel(level)             Bedrock level.dat → Java level.dat
 export.ConvertWorld(src, dst, opts)    Bedrock 存档 → Java 存档，不跑 fixer          （导出第 1 步）
@@ -286,7 +288,7 @@ section 解码失败通过 `error` 返回。
 3×3 的区块范围提供中心周围完整的柱子，因此取格可以同时跨越区块边界和 section 边界。
 中心输入和邻居都保持原值。
 有改动的 section 使用新调色板，未改动的直接共享输入。
-缓存应保存阶段 1 结果，修复结果单独交给消费者。
+阶段 1 与修复结果分别缓存，供邻居使用的输入始终取自阶段 1。
 
 修复由十个 pass 组成，清单见上文「能力一览」。
 一个 pass 是只处理一类邻接规则的遍历。
@@ -303,6 +305,125 @@ section 解码失败通过 `error` 返回。
 它与区块入口共用取格函数和全部 pass。
 viewer 在自己的边界把 hash 还原成 Java 状态，并按渲染入口的需要转换回 hash。
 hash 是由完整方块状态计算的数值标识。
+
+## adapt：按坐标读取与缓存
+
+浏览器和区域导出通常只需要世界中的一部分柱子。
+`adapt` 把读取、转换和可选的邻接修复组织成按坐标取柱子的来源。
+消费方调用 `Chunk(ctx, pos)`，取得共享只读的 `ConvertedChunk`。
+不存在的柱子返回 `nil, nil`。
+
+只需要转换结果时，使用 `Converted`。
+它调用读取回调取得 Bedrock 柱子，再执行 `bedrock.ConvertChunk`。
+需要邻接状态时，在它上面接一个 `Fixed`。
+`Fixed` 从同一个 `Converted` 取得中心及八个邻居，再调用 `fixer.Fix`。
+两种来源都实现 `ChunkSource`，消费方可以使用同一套读取代码。
+
+修复可能改变邻居的形状，例如直楼梯变成内拐角后会多出一个完整侧面。
+如果再拿这个形状去修复旁边的栅栏，结果就会依赖柱子的访问顺序。
+因此 `NewFixed` 的输入类型是 `*Converted`，而不是任意 `ChunkSource`。
+这使 `Fixed` 无法被误接到另一个 `Fixed` 上。
+调用方仍可同时读取同一个 `Converted` 和它上面的 `Fixed`。
+已有其他形式的阶段 1 数据时，可以直接调用 `fixer.Fix`。
+
+### 冷请求与复用
+
+冷请求指依赖的数据尚未进入缓存。
+单独请求一根修复柱子，最多需要读取并转换 3×3 范围的九根柱子，然后修复中心。
+渲染器为了剔除被邻居遮住的面，还会请求中心的东、西、南、北四根修复柱子。
+这五个位置的 3×3 范围合并后，是 5×5 去掉四个角。
+在柱子都存在且转换缓存足够容纳这些输入时，一次这样的渲染需要转换 21 根、修复 5 根。
+上下相邻的 section 属于同一根柱子，不再扩大这个水平范围。
+
+`Converted` 缓存完整的阶段 1 结果，包括诊断。
+`Fixed` 另存完整的修复结果。
+相邻视点和不同高度窗口可以复用这些柱子。
+缺失结果也进入缓存，避免在空区域重复查找。
+中心不存在时，修复层直接返回缺失结果。
+读取或转换失败通过 `error` 返回，下次请求会重试。
+
+两层使用同一套 LRU 实现。
+LRU 会在预算不足时淘汰最久没有被访问的条目。
+每层通过 `Options.CacheBytes` 单独设置预算，零值为 64 MiB。
+负值只合并正在进行的任务，完成后不保留结果。
+超过整层预算的单根柱子也只交给当前等待者。
+
+预算按调色板、状态文本、实体 NBT 和诊断的估算字节计费。
+条目还计入 map 和链表的估算开销，因此缺失结果也占预算。
+两个阶段共享的对象在各自缓存中分别计费。
+预算用于限制缓存留存，不等于进程内存上限。
+正在计算的柱子、底层读取缓冲以及调用方仍持有的结果都可能占用额外内存。
+缓存淘汰只释放缓存的引用，调用方拿到的柱子仍然有效。
+
+### 并发、取消与来源生命周期
+
+同一实例的 `Chunk` 可以并发调用。
+两层各自按坐标合并正在进行的任务，这称为单飞。
+同时请求同一个坐标的调用者等待同一份结果。
+不同坐标可以并行计算，因此读取回调也必须允许并发调用。
+同一来源上的多个 `Fixed` 可以共享一个 `Converted` 的转换缓存。
+
+每个调用者的 context 控制自己的等待。
+首个调用者超时或取消，也不会打断其他等待者。
+最后一个等待者离开时，共享任务的 context 被取消，坐标立即允许重新请求。
+读取回调会收到这个共享 context，它保留首个调用者的 context 值。
+回调应以共享 context 的取消信号结束可中断的工作。
+
+`ConvertChunk` 和 `Fix` 本身没有中途取消入口。
+取消通过阶段边界生效，已经开始的计算可能继续到返回。
+不支持中途取消的读取也可能与同坐标的重试短暂重叠。
+废弃任务的结果不会进入缓存，也不会替换重试任务。
+因此 `Chunk` 返回取消错误，不代表底层读取已经退出。
+读取回调的拥有者负责协调正在使用的句柄与关闭操作。
+
+一个 `Converted` 实例绑定一个稳定的数据来源和维度。
+切换来源、维度或修改底层数据时，应创建新的来源实例和对应的修复层。
+返回值中的 map、调色板、NBT 和诊断都按只读共享。
+调用方要修改其中的数据时，先复制需要修改的部分。
+
+### 组装与使用
+
+先提供一个已打开的 `*cellerbedrock.World`，并选定 Bedrock 维度编号 `dimension`。
+下面是省略应用层错误处理的组装伪代码。
+回调借用 world；world 的关闭由应用层与读取操作协调。
+`cellerbedrock.World.ReadChunk` 在找不到任何区块记录时返回 `fs.ErrNotExist`。
+`NewConverted` 会识别这个错误，包括包装后的错误，并将其转换为缺失结果。
+
+```go
+read := func(
+    ctx context.Context,
+    pos celler.ChunkPos,
+) (*cellerbedrock.Chunk, error) {
+    return world.ReadChunk(dimension, pos)
+}
+
+converted := adapt.NewConverted(read, adapt.Options{})
+```
+
+只转换时，把 `converted` 交给消费方：
+
+```go
+var source adapt.ChunkSource = converted
+chunk, err := source.Chunk(ctx, celler.ChunkPos{X: 10, Z: -3})
+```
+
+需要修复时，加载 fixer 并组合第二层：
+
+```go
+f, err := fixer.New()
+// 处理 err 后再组装。
+var source adapt.ChunkSource = adapt.NewFixed(
+    converted,
+    f,
+    adapt.Options{},
+)
+chunk, err := source.Chunk(ctx, celler.ChunkPos{X: 10, Z: -3})
+```
+
+viewer 可以把取得的柱子适配成渲染 section。
+区域导出可以遍历所需坐标，把柱子传给 `export.ToJavaChunk` 和 `export.ToJavaEntities`。
+两种用途共用上述来源，邻居仍从原始 Bedrock 来源读取。
+转换和修复的语义及诊断含义见前面的两个阶段。
 
 ## 添加规则
 
@@ -332,8 +453,7 @@ hash 是由完整方块状态计算的数值标识。
 无法转换的条目整体跳过，所有条目都跳过时仍保留空箱实体。
 范围、文字近似转换和映射数据来源见 [items 包说明](bedrock/items/doc.go)。
 
-需要按请求读取并缓存区块时，`adapt.OnDemandConverter` 是预留的适配类型。
-`bedrock/biomes`、`bedrock/actors` 也只预留职责。
+`bedrock/biomes`、`bedrock/actors` 只预留职责。
 
 ## 用法
 
