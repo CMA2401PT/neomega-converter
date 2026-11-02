@@ -13,9 +13,10 @@ import (
 
 	cellerbedrock "celler/bedrock"
 	"celler/java"
-	"neomega-converter"
-	"neomega-converter/export"
-	"neomega-converter/fixer"
+	"neomega-converter-core"
+	"neomega-converter-core/export"
+	postprocess "neomega-converter/export"
+	"neomega-viewer-core/fixer/java-postprocess"
 )
 
 func main() {
@@ -142,10 +143,10 @@ func fixWorld(target *java.World, dimensions []int32, output io.Writer) error {
 		mapped, _ := export.JavaDimension(dim)
 		javaDims = append(javaDims, mapped)
 	}
-	fixed, err := export.FixWorld(
+	fixed, err := postprocess.FixWorld(
 		target,
 		f,
-		export.FixOptions{Dimensions: javaDims},
+		postprocess.FixOptions{Dimensions: javaDims},
 	)
 	fmt.Fprintf(output, "fix.chunks=%d\nfix.changed_sections=%d\n", fixed.Chunks, fixed.ChangedSections)
 	return err

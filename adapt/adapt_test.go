@@ -16,8 +16,10 @@ import (
 	"celler/layer_storage"
 	"neomega-blocks/ir"
 	converts "neomega-blocks/presets/block-converts/v1"
-	"neomega-converter"
-	"neomega-converter/fixer"
+	repair "neomega-converter"
+	"neomega-converter-core"
+	coreadapt "neomega-converter-core/adapt"
+	"neomega-viewer-core/fixer/java-postprocess"
 )
 
 func memoryChunk(t *testing.T, pos celler.ChunkPos, blocks map[layer_storage.Position]ir.IRBlock) *cellerbedrock.Chunk {
@@ -36,7 +38,7 @@ func memoryChunk(t *testing.T, pos celler.ChunkPos, blocks map[layer_storage.Pos
 	return chunk
 }
 
-func memoryRead(chunks map[celler.ChunkPos]*cellerbedrock.Chunk) ReadChunk {
+func memoryRead(chunks map[celler.ChunkPos]*cellerbedrock.Chunk) coreadapt.ReadChunk {
 	return func(ctx context.Context, pos celler.ChunkPos) (*cellerbedrock.Chunk, error) {
 		if chunk := chunks[pos]; chunk != nil {
 			return chunk, nil
@@ -54,7 +56,7 @@ func newFixer(t *testing.T) *fixer.Fixer {
 	return f
 }
 
-func getChunk(t *testing.T, src ChunkSource, pos celler.ChunkPos) *converter.ConvertedChunk {
+func getChunk(t *testing.T, src coreadapt.ChunkSource, pos celler.ChunkPos) *converter.ConvertedChunk {
 	t.Helper()
 	chunk, err := src.Chunk(context.Background(), pos)
 	if err != nil || chunk == nil {
@@ -92,18 +94,18 @@ func TestConvertedAndFixedAssembly(t *testing.T) {
 	chunks := fenceChunks(t)
 	var reads atomic.Int32
 	read := memoryRead(chunks)
-	converted := NewConverted(func(ctx context.Context, pos celler.ChunkPos) (*cellerbedrock.Chunk, error) {
+	converted := coreadapt.NewConverted(func(ctx context.Context, pos celler.ChunkPos) (*cellerbedrock.Chunk, error) {
 		reads.Add(1)
 		return read(ctx, pos)
-	}, Options{})
+	}, coreadapt.Options{})
 	west, east := celler.ChunkPos{X: -1, Z: 2}, celler.ChunkPos{Z: 2}
-	var source ChunkSource = converted
+	var source coreadapt.ChunkSource = converted
 	raw := getChunk(t, source, west)
 	assertState(t, blockAt(raw, 15, 8), "east", "false")
 	if reads.Load() != 1 || raw.Pos != west || raw.Dimension != 2 {
 		t.Fatal("只转换应只读中心，并保留来源坐标和维度")
 	}
-	source = NewFixed(converted, newFixer(t), Options{})
+	source = NewFixed(converted, newFixer(t), coreadapt.Options{})
 	assertState(t, blockAt(getChunk(t, source, west), 15, 8), "east", "true")
 	assertState(t, blockAt(getChunk(t, source, east), 0, 8), "west", "true")
 	assertState(t, blockAt(raw, 15, 8), "east", "false")
@@ -138,14 +140,14 @@ func TestFixedUsesUnfixedNeighbours(t *testing.T) {
 			layer_storage.At(0, 4, 9): stairs("west"),
 		}),
 	}
-	converted := NewConverted(memoryRead(chunks), Options{})
+	converted := coreadapt.NewConverted(memoryRead(chunks), coreadapt.Options{})
 	f := newFixer(t)
-	fixed := NewFixed(converted, f, Options{})
+	fixed := NewFixed(converted, f, coreadapt.Options{})
 	rawWest, rawEast := getChunk(t, converted, west), getChunk(t, converted, east)
 	fixedEast := getChunk(t, fixed, east)
 	assertState(t, blockAt(rawEast, 0, 8), "shape", "straight")
 	assertState(t, blockAt(fixedEast, 0, 8), "shape", "inner_left")
-	wrong := f.Fix(rawWest, fixer.ChunkNeighbours{fixer.E: fixedEast})
+	wrong := repair.FixChunk(f, rawWest, [8]*converter.ConvertedChunk{fixer.E: fixedEast})
 	assertState(t, blockAt(wrong, 15, 8), "east", "true")
 	got := getChunk(t, fixed, west)
 	assertState(t, blockAt(got, 15, 8), "east", "false")
@@ -160,27 +162,14 @@ func TestConcurrentRequestsShareBothStages(t *testing.T) {
 		var mu sync.Mutex
 		reads := make(map[celler.ChunkPos]int)
 		read := memoryRead(chunks)
-		converted := NewConverted(func(ctx context.Context, pos celler.ChunkPos) (*cellerbedrock.Chunk, error) {
+		converted := coreadapt.NewConverted(func(ctx context.Context, pos celler.ChunkPos) (*cellerbedrock.Chunk, error) {
 			mu.Lock()
 			reads[pos]++
 			mu.Unlock()
 			<-gate
 			return read(ctx, pos)
-		}, Options{})
-		fixed := NewFixed(converted, f, Options{})
-		var conversions, repairs atomic.Int32
-		convertLoad, fixLoad := converted.cache.load, fixed.cache.load
-		converted.cache.load = func(ctx context.Context, pos celler.ChunkPos) (*converter.ConvertedChunk, error) {
-			chunk, err := convertLoad(ctx, pos)
-			if chunk != nil {
-				conversions.Add(1)
-			}
-			return chunk, err
-		}
-		fixed.cache.load = func(ctx context.Context, pos celler.ChunkPos) (*converter.ConvertedChunk, error) {
-			repairs.Add(1)
-			return fixLoad(ctx, pos)
-		}
+		}, coreadapt.Options{})
+		fixed := NewFixed(converted, f, coreadapt.Options{})
 		const callers = 12
 		var raw, repaired [callers]*converter.ConvertedChunk
 		var wg sync.WaitGroup
@@ -197,8 +186,8 @@ func TestConcurrentRequestsShareBothStages(t *testing.T) {
 				t.Fatal("并发调用没有共享同一次计算的结果")
 			}
 		}
-		if conversions.Load() != 2 || repairs.Load() != 1 || len(reads) != 9 {
-			t.Fatalf("conversions=%d repairs=%d read positions=%d", conversions.Load(), repairs.Load(), len(reads))
+		if len(reads) != 9 {
+			t.Fatalf("read positions=%d", len(reads))
 		}
 		for pos, count := range reads {
 			if count != 1 {
@@ -209,22 +198,22 @@ func TestConcurrentRequestsShareBothStages(t *testing.T) {
 }
 
 func TestEvictionPreservesResults(t *testing.T) {
-	// 让两层预算都只容纳一根有内容的柱子，跨区读取后必须能重新生成相同方块。
+	// 禁用两层结果缓存，验证重新转换和修复仍得到相同方块。
 	chunks := fenceChunks(t)
 	read := memoryRead(chunks)
-	baseline := NewConverted(read, Options{})
+	baseline := coreadapt.NewConverted(read, coreadapt.Options{})
 	west, east := celler.ChunkPos{X: -1, Z: 2}, celler.ChunkPos{Z: 2}
 	f := newFixer(t)
-	want := getChunk(t, NewFixed(baseline, f, Options{}), west)
-	limit := max(chunkBytes(getChunk(t, baseline, west)), chunkBytes(want))
+	want := getChunk(t, NewFixed(baseline, f, coreadapt.Options{}), west)
+	limit := int64(-1)
 	var reads atomic.Int32
-	converted := NewConverted(func(ctx context.Context, pos celler.ChunkPos) (*cellerbedrock.Chunk, error) {
+	converted := coreadapt.NewConverted(func(ctx context.Context, pos celler.ChunkPos) (*cellerbedrock.Chunk, error) {
 		if pos == west {
 			reads.Add(1)
 		}
 		return read(ctx, pos)
-	}, Options{CacheBytes: limit})
-	fixed := NewFixed(converted, f, Options{CacheBytes: limit})
+	}, coreadapt.Options{CacheBytes: limit})
+	fixed := NewFixed(converted, f, coreadapt.Options{CacheBytes: limit})
 	first := getChunk(t, fixed, west)
 	getChunk(t, fixed, east)
 	again := getChunk(t, fixed, west)
@@ -234,22 +223,18 @@ func TestEvictionPreservesResults(t *testing.T) {
 	if !reflect.DeepEqual(first, want) || !reflect.DeepEqual(again, want) {
 		t.Fatal("缓存淘汰改变了结果")
 	}
-	for _, cache := range []*chunkCache{converted.cache, fixed.cache} {
-		if cache.bytes > limit {
-			t.Fatal("缓存超过预算")
-		}
-	}
+
 }
 
 func TestMissingChunkAndErrors(t *testing.T) {
 	var reads int
-	converted := NewConverted(func(ctx context.Context, pos celler.ChunkPos) (*cellerbedrock.Chunk, error) {
+	converted := coreadapt.NewConverted(func(ctx context.Context, pos celler.ChunkPos) (*cellerbedrock.Chunk, error) {
 		reads++
 		return nil, fmt.Errorf("missing: %w", fs.ErrNotExist)
-	}, Options{})
-	fixed := NewFixed(converted, newFixer(t), Options{})
+	}, coreadapt.Options{})
+	fixed := NewFixed(converted, newFixer(t), coreadapt.Options{})
 	for range 2 {
-		for _, source := range []ChunkSource{converted, fixed} {
+		for _, source := range []coreadapt.ChunkSource{converted, fixed} {
 			got, err := source.Chunk(context.Background(), celler.ChunkPos{})
 			if got != nil || err != nil {
 				t.Fatalf("missing = %v, %v", got, err)
@@ -272,11 +257,11 @@ func TestMissingChunkAndErrors(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			calls := 0
-			converted := NewConverted(func(context.Context, celler.ChunkPos) (*cellerbedrock.Chunk, error) {
+			converted := coreadapt.NewConverted(func(context.Context, celler.ChunkPos) (*cellerbedrock.Chunk, error) {
 				calls++
 				return test.raw, test.err
-			}, Options{})
-			fixed := NewFixed(converted, newFixer(t), Options{})
+			}, coreadapt.Options{})
+			fixed := NewFixed(converted, newFixer(t), coreadapt.Options{})
 			for range 2 {
 				_, err := fixed.Chunk(context.Background(), celler.ChunkPos{})
 				if err == nil || (test.err != nil && !errors.Is(err, test.err)) {

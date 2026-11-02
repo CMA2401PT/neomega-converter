@@ -9,9 +9,10 @@ import (
 	"celler/java"
 	"celler/layer_storage"
 	"neomega-blocks/ir"
-	"neomega-converter"
-	"neomega-converter/fixer"
+	repair "neomega-converter"
+	"neomega-converter-core"
 	nbt "neomega-nbt/presets/v1"
+	"neomega-viewer-core/fixer/java-postprocess"
 )
 
 type FixOptions struct {
@@ -92,7 +93,7 @@ func FixWorld(world *java.World, f *fixer.Fixer, options FixOptions) (report Fix
 			}
 			for _, pos := range row.positions {
 				center := window[row.z][pos]
-				var neighbours fixer.ChunkNeighbours
+				var neighbours [8]*converter.ConvertedChunk
 				for side, offset := range [8][2]int32{
 					{-1, -1}, {0, -1}, {1, -1}, {-1, 0},
 					{1, 0}, {-1, 1}, {0, 1}, {1, 1},
@@ -101,7 +102,7 @@ func FixWorld(world *java.World, f *fixer.Fixer, options FixOptions) (report Fix
 						X: pos.X + offset[0], Z: pos.Z + offset[1],
 					}]
 				}
-				fixed := f.Fix(center, neighbours)
+				fixed := repair.FixChunk(f, center, neighbours)
 				changed, err := writeFixedBlocks(world, dim, center, fixed)
 				if err != nil {
 					return report, err

@@ -9,9 +9,11 @@ import (
 	"celler/layer_storage"
 	"neomega-blocks/ir"
 	converts "neomega-blocks/presets/block-converts/v1"
-	"neomega-converter"
-	"neomega-converter/fixer"
+	repair "neomega-converter"
+	"neomega-converter-core"
+	coreexport "neomega-converter-core/export"
 	nbt "neomega-nbt/presets/v1"
+	"neomega-viewer-core/fixer/java-postprocess"
 )
 
 func javaState(t *testing.T, text string) ir.IRBlock {
@@ -25,7 +27,7 @@ func javaState(t *testing.T, text string) ir.IRBlock {
 
 func writeConverted(t *testing.T, world *java.World, source *converter.ConvertedChunk) *java.Chunk {
 	t.Helper()
-	chunk, err := ToJavaChunk(source, DataVersion)
+	chunk, err := coreexport.ToJavaChunk(source, coreexport.DataVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,11 +156,11 @@ func TestFixWorldUsesOriginalNeighbours(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var firstNeighbours, secondNeighbours fixer.ChunkNeighbours
+			var firstNeighbours, secondNeighbours [8]*converter.ConvertedChunk
 			firstNeighbours[test.forward] = second
 			secondNeighbours[test.backward] = first
-			fixedFirst := f.Fix(first, firstNeighbours)
-			fixedSecond := f.Fix(second, secondNeighbours)
+			fixedFirst := repair.FixChunk(f, first, firstNeighbours)
+			fixedSecond := repair.FixChunk(f, second, secondNeighbours)
 			for _, pair := range []struct {
 				center, fixed, other *converter.ConvertedChunk
 				side                 int
@@ -167,9 +169,9 @@ func TestFixWorldUsesOriginalNeighbours(t *testing.T) {
 				{center: first, fixed: fixedFirst, other: fixedSecond, side: test.forward, at: firstFence},
 				{center: second, fixed: fixedSecond, other: fixedFirst, side: test.backward, at: test.secondEdge},
 			} {
-				var neighbours fixer.ChunkNeighbours
+				var neighbours [8]*converter.ConvertedChunk
 				neighbours[pair.side] = pair.other
-				sequential := f.Fix(pair.center, neighbours)
+				sequential := repair.FixChunk(f, pair.center, neighbours)
 				if pair.fixed.Sections[0].Blocks.Get(pair.at) == sequential.Sections[0].Blocks.Get(pair.at) {
 					t.Fatal("fixture does not distinguish original and fixed neighbours")
 				}
@@ -211,7 +213,7 @@ func TestFixWorldKeepsWrittenChangesOnLaterError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bad := java.NewChunk(celler.ChunkPos{}, DataVersion)
+	bad := java.NewChunk(celler.ChunkPos{}, coreexport.DataVersion)
 	bad.NBT.Value["sections"] = []nbt.Compound{{"Y": int8(0), "block_states": "broken"}}
 	if err = world.WriteChunk(java.Nether, bad); err != nil {
 		t.Fatal(err)
@@ -260,7 +262,7 @@ func TestFixWorldRowsMatchWholeDimension(t *testing.T) {
 			writeConverted(t, world, source)
 		}
 	}
-	lightOnly := java.NewChunk(celler.ChunkPos{X: 35, Z: 4}, DataVersion)
+	lightOnly := java.NewChunk(celler.ChunkPos{X: 35, Z: 4}, coreexport.DataVersion)
 	if err := lightOnly.SetSection(&java.Section{Y: 0, NBT: nbt.Compound{"SkyLight": nbt.Array([]int8{7})}}); err != nil {
 		t.Fatal(err)
 	}
@@ -302,14 +304,14 @@ func TestFixWorldRowsMatchWholeDimension(t *testing.T) {
 	want := make(map[celler.ChunkPos]*converter.ConvertedChunk)
 	expectedReport := FixReport{Chunks: uint64(len(originals))}
 	for pos, original := range originals {
-		var neighbours fixer.ChunkNeighbours
+		var neighbours [8]*converter.ConvertedChunk
 		for side, offset := range [8][2]int32{
 			{-1, -1}, {0, -1}, {1, -1}, {-1, 0},
 			{1, 0}, {-1, 1}, {0, 1}, {1, 1},
 		} {
 			neighbours[side] = originals[celler.ChunkPos{X: pos.X + offset[0], Z: pos.Z + offset[1]}]
 		}
-		fixed := f.Fix(original, neighbours)
+		fixed := repair.FixChunk(f, original, neighbours)
 		want[pos] = fixed
 		for y, section := range fixed.Sections {
 			if section.Blocks != original.Sections[y].Blocks {
@@ -339,4 +341,26 @@ func TestFixWorldRowsMatchWholeDimension(t *testing.T) {
 			}
 		}
 	}
+}
+
+func openJava(t *testing.T) *java.World {
+	t.Helper()
+	world, err := java.OpenDirectory(t.TempDir(), java.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := world.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	return world
+}
+
+func converted(pos celler.ChunkPos, ys ...int32) *converter.ConvertedChunk {
+	result := &converter.ConvertedChunk{Pos: pos, Sections: make(map[int32]*converter.ConvertedSection)}
+	for _, y := range ys {
+		result.Sections[y] = &converter.ConvertedSection{Blocks: layer_storage.MakePaletteStorage(ir.IRBlock("minecraft:air []"))}
+	}
+	return result
 }

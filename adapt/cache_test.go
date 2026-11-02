@@ -11,8 +11,9 @@ import (
 
 	"celler"
 	cellerbedrock "celler/bedrock"
-	"neomega-converter"
-	"neomega-converter/fixer"
+	"neomega-converter-core"
+	coreadapt "neomega-converter-core/adapt"
+	"neomega-viewer-core/fixer/java-postprocess"
 )
 
 type chunkReply struct {
@@ -20,7 +21,7 @@ type chunkReply struct {
 	err   error
 }
 
-func requestChunk(ctx context.Context, src ChunkSource) <-chan chunkReply {
+func requestChunk(ctx context.Context, src coreadapt.ChunkSource) <-chan chunkReply {
 	// 用结果通道观察取消，而不依赖真实时钟或 goroutine 调度速度。
 	done := make(chan chunkReply, 1)
 	go func() {
@@ -30,10 +31,10 @@ func requestChunk(ctx context.Context, src ChunkSource) <-chan chunkReply {
 	return done
 }
 
-func sourceForStage(read ReadChunk, stage string, f *fixer.Fixer) ChunkSource {
-	converted := NewConverted(read, Options{})
+func sourceForStage(read coreadapt.ReadChunk, stage string, f *fixer.Fixer) coreadapt.ChunkSource {
+	converted := coreadapt.NewConverted(read, coreadapt.Options{})
 	if stage == "fixed" {
-		return NewFixed(converted, f, Options{})
+		return NewFixed(converted, f, coreadapt.Options{})
 	}
 	return converted
 }
@@ -184,37 +185,6 @@ func TestAbandonedWorkCannotReplaceRetry(t *testing.T) {
 	}
 }
 
-func TestLRUAndOversizedEntries(t *testing.T) {
-	raw := memoryChunk(t, celler.ChunkPos{}, nil)
-	probe := NewConverted(memoryRead(map[celler.ChunkPos]*cellerbedrock.Chunk{{}: raw}), Options{})
-	size := chunkBytes(getChunk(t, probe, celler.ChunkPos{}))
-	var reads [3]int
-	source := NewConverted(func(ctx context.Context, pos celler.ChunkPos) (*cellerbedrock.Chunk, error) {
-		reads[pos.X]++
-		copy := *raw
-		copy.Pos = pos
-		return &copy, nil
-	}, Options{CacheBytes: 2 * size})
-	for _, x := range []int32{0, 1, 0, 2, 0, 1} {
-		getChunk(t, source, celler.ChunkPos{X: x})
-	}
-	if reads != ([3]int{1, 2, 1}) {
-		t.Fatalf("LRU reads=%v", reads)
-	}
-	for _, limit := range []int64{size - 1, -1} {
-		reads := 0
-		source := NewConverted(func(context.Context, celler.ChunkPos) (*cellerbedrock.Chunk, error) {
-			reads++
-			return raw, nil
-		}, Options{CacheBytes: limit})
-		first := getChunk(t, source, celler.ChunkPos{})
-		second := getChunk(t, source, celler.ChunkPos{})
-		if reads != 2 || first == second || source.cache.bytes != 0 {
-			t.Fatal("超预算或禁用缓存时仍保留了条目")
-		}
-	}
-}
-
 func TestFiveFixedColumnsReadTwentyOneConvertedColumns(t *testing.T) {
 	chunks := make(map[celler.ChunkPos]*cellerbedrock.Chunk)
 	for x := int32(-2); x <= 2; x++ {
@@ -225,23 +195,22 @@ func TestFiveFixedColumnsReadTwentyOneConvertedColumns(t *testing.T) {
 	}
 	var reads int
 	read := memoryRead(chunks)
-	converted := NewConverted(func(ctx context.Context, pos celler.ChunkPos) (*cellerbedrock.Chunk, error) {
+	converted := coreadapt.NewConverted(func(ctx context.Context, pos celler.ChunkPos) (*cellerbedrock.Chunk, error) {
 		reads++
 		return read(ctx, pos)
-	}, Options{})
-	fixed := NewFixed(converted, newFixer(t), Options{})
-	var repairs int
-	load := fixed.cache.load
-	fixed.cache.load = func(ctx context.Context, pos celler.ChunkPos) (*converter.ConvertedChunk, error) {
-		repairs++
-		return load(ctx, pos)
-	}
+	}, coreadapt.Options{})
+	fixed := NewFixed(converted, newFixer(t), coreadapt.Options{})
+	results := make(map[celler.ChunkPos]*converter.ConvertedChunk)
 	for range 2 {
 		for _, pos := range []celler.ChunkPos{{}, {X: -1}, {X: 1}, {Z: -1}, {Z: 1}} {
-			getChunk(t, fixed, pos)
+			got := getChunk(t, fixed, pos)
+			if before := results[pos]; before != nil && before != got {
+				t.Fatal("修复结果未复用")
+			}
+			results[pos] = got
 		}
-		if reads != 21 || repairs != 5 {
-			t.Fatalf("reads=%d repairs=%d", reads, repairs)
+		if reads != 21 {
+			t.Fatalf("reads=%d", reads)
 		}
 	}
 }

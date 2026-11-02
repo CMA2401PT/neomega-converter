@@ -15,17 +15,19 @@ Bedrock 区块
     ▼  bedrock.ConvertChunk（阶段 1）
 ConvertedChunk（已转换，可缓存）
     │
-    ▼  fixer.Fix（阶段 2，可选）
+    ▼  converter.FixChunk（阶段 2，可选）
 ConvertedChunk（已修复）
     │
     ▼  消费方自行适配
 viewer、Java 存档写出……
 ```
 
+转换逻辑来自 `neomega-converter-core`，修复规则来自 `neomega-viewer-core/fixer/java-postprocess`，本模块负责组合。
+
 阶段 1 只依赖当前区块，结果可以缓存，供多个邻居修复共享。
 阶段 2 需要中心区块和周围 8 个区块的阶段 1 结果。
 
-按坐标浏览或导出局部区域时，可用 `adapt.NewConverted` 缓存阶段 1，再按需要组合 `adapt.NewFixed`。
+按坐标浏览或导出局部区域时，可用 `neomega-converter-core/adapt.NewConverted` 缓存阶段 1，再按需要组合 `neomega-converter/adapt.NewFixed`。
 两层的组装、缓存与并发约定见 [README 的 adapt 说明](README.md#adapt按坐标读取与缓存)。
 
 **fixer 是可选的**。如果只需要方块内容正确（床颜色、含水、物品），不在意栅栏连接或楼梯拐角，
@@ -36,6 +38,8 @@ viewer、Java 存档写出……
 ## 二、各模块的调用方式和适用范围
 
 ### 2.1 方块状态基础转换（不走 ConvertChunk）
+
+以下片段中，`bedrock`、`items` 与 `core` 来自 converter-core，`converter` 来自本模块，`fixer` 来自 viewer-core。
 
 适用：只想转换单个 Bedrock 方块状态，不需要 NBT 或邻居。
 
@@ -77,7 +81,7 @@ converted, err := bedrock.ConvertChunk(src)
 
 适用：只想对一个格子应用方块实体规则，不走完整区块流程。
 
-按 id 选规则的注册表在 `bedrock` 包内部，没有导出。调用方自己按 ID 选子包：
+`bedrock.ConvertBlockEntity` 根据 ID 选择规则；需要直接调用某条规则时，也可以使用对应子包：
 
 ```go
 result, err := bed.Convert(blockentities.Input{
@@ -89,7 +93,7 @@ result, err := bed.Convert(blockentities.Input{
 ```
 
 `err!=nil` 表示规则执行失败，调用方保留 Base 状态。
-各规则的报错条件和降级见 [README 的能力一览](README.md#能力一览)。
+各规则的报错条件和降级见 [转换核心的能力一览](../neomega-converter-core/README.md#能力一览)。
 
 ---
 
@@ -106,7 +110,7 @@ javaItem := items.ConvertItem(bedrockItemCompound)
 支持：方块物品（Block compound、legacy data value 或名称转出 Java 方块）、药水/药水箭（potionIDs 编号表）、
 书本（written_book/writable_book）、附魔。
 
-不支持：工具/武器/盔甲/食物（需要 Bedrock→Java 物品名映射表，见 `bedrock/items/doc.go`）、嵌套容器。
+不支持：工具/武器/盔甲/食物（需要 Bedrock→Java 物品名映射表，见 `neomega-converter-core/bedrock/items/doc.go`）、嵌套容器。
 
 ---
 
@@ -117,7 +121,7 @@ javaItem := items.ConvertItem(bedrockItemCompound)
 **整根区块版**（整图导出、按需模式）：
 ```go
 f, err := fixer.New()
-fixed := f.Fix(center, fixer.ChunkNeighbours{
+fixed := converter.FixChunk(f, center, [8]*core.ConvertedChunk{
     fixer.NW: nwChunk, fixer.N: nChunk, /* … */
 })
 ```
@@ -131,7 +135,7 @@ fixed := f.FixSection(section, [6]*layer_storage.Palette[ir.IRBlock]{
 })
 ```
 
-已实现的 pass（按执行顺序；各自的降级见 README 的能力一览）：
+已实现的 pass（按执行顺序；各自的限制见 viewer-core 的 fixer/FIXER.md）：
 1. connections：栅栏、玻璃板、铁栏杆连接
 2. fireConnections：火的附着方向
 3. stairShapes：楼梯拐角
@@ -162,13 +166,13 @@ section = converted.Sections[0]
 **转单个 section，含 NBT，修复邻接（无邻居时按空气）**：
 ```
 converted = ConvertChunk(chunk)
-fixed = fixer.Fix(converted, 空 ChunkNeighbours)
+fixed = converter.FixChunk(fixer, converted, 空八邻居数组)
 section = fixed.Sections[0]
 ```
 
 **整图导出**：用 `export` 包，两步互不依赖：
 ```
-report = export.ConvertWorld(bedrockWorld, javaWorld, options)   // 不跑 fixer，写 PostProcessing
+report = coreexport.ConvertWorld(bedrockWorld, javaWorld, options)   // 不跑 fixer，写 PostProcessing
 fixReport = export.FixWorld(javaWorld, fixer, fixOptions)        // 可选，读回 Java 存档修复后写回
 ```
 
@@ -209,13 +213,13 @@ mcconv 在 `tools/gendata/main.go` 从那里生成 `Tables.ItemBedrockToJava`。
 但 Java 用字符串 ID，Bedrock 用整数，需要一张对照表。
 mcconv 在 `translate/tables.go` 用 GeyserMC/mappings 和 pmmp/BedrockData 生成这张表。
 
-**留位**：`bedrock/biomes/`，等数据来源确定后接入。
+**留位**：`neomega-converter-core/bedrock/biomes/`，等数据来源确定后接入。
 
 ---
 
 ### 3.4 展示框：方块实体变成 Java 实体
 
-**现状**：已转换。`bedrock/blockentities/item_frame` 把展示框所在格子转成空气，
+**现状**：已转换。`neomega-converter-core/bedrock/blockentities/item_frame` 把展示框所在格子转成空气，
 并在 `ConvertedChunk.Entities` 里产出 Java `minecraft:item_frame` / `minecraft:glow_item_frame` 实体。
 还缺的部分见本节末尾。
 
@@ -255,13 +259,14 @@ Java 的展示框不是方块，是实体，存放在 `entities/` 目录的 regi
 **mcconv 的做法**：`convert/entities.go` 单独处理普通实体，
 从 bedrock/world.go 的 actor/digp 记录读取，写入独立的 Java entities region。
 
-**留位**：`bedrock/actors/`，等 celler 暴露读取接口后接入。
+**留位**：`neomega-converter-core/bedrock/actors/`，等 celler 暴露读取接口后接入。
 
 ---
 
 ### 3.6 整图导出
 
-**现状**：已实现，见 README「export：导出 Java 存档」和「命令行导出」。
+**现状**：已实现，见 converter-core README 的导出说明及本模块 README 的命令行说明。
+`coreexport` 是 `neomega-converter-core/export`，`export` 是本模块的 `neomega-converter/export`。
 转换和邻接修复是两个独立步骤，修复步骤读写的是已经写好的 Java 存档。
 
 **还缺的部分**：

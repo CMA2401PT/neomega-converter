@@ -14,7 +14,7 @@ import (
 	"celler/layer_storage"
 	"neomega-blocks/ir"
 	converts "neomega-blocks/presets/block-converts/v1"
-	"neomega-converter/export"
+	"neomega-converter-core/export"
 	nbt "neomega-nbt/presets/v1"
 )
 
