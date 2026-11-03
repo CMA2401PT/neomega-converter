@@ -1,24 +1,46 @@
 # neomega-converter
 
-本模块位于工作区的 `apps/` 能力组装层，Go 模块名保持为 `neomega-converter`。
+`neomega-converter` 把 Bedrock 存档转换为 Java 存档，并可按邻居补全栅栏连接、楼梯拐角等方块属性。它既提供命令行导出，也提供按区块坐标读取的缓存来源，供浏览器或区域导出使用。
 
-本模块把 Bedrock → Java 转换与 Java 邻接属性修复组合起来，提供存档导出命令和按需浏览适配。
-转换来自 [neomega-converter-core](../../neomega-converter-core/README.md)，修复规则来自 [viewer-core 的 fixer](../../neomega-viewer-core/fixer/java-postprocess/README.md)。
-两个 core 彼此不依赖，只有本模块同时使用它们。
+转换来自 [neomega-converter-core](../../neomega-converter-core/README.md)，邻接修复来自 [viewer-core 的 fixer](../../neomega-viewer-core/fixer/java-postprocess/README.md)。两者由本模块组合，调用方可以只转换，也可以转换后修复，或单独修复已有 Java 世界。
 
-## 三种组合入口
+## 先导出一份存档
+
+需要 Go 1.25.5 或以上，并保留工作区中的兄弟模块目录，具体依赖由 `go.mod` 指定。下面的命令从 `apps/neomega-converter` 目录执行，转换目标为 Java 1.21.4。
+
+
+`cmd/bedrock-to-java` 组合存档转换与可选的邻接修复。
+LevelDB 打开时可能写文件，所以要对 Bedrock 存档的副本运行。
+
+```sh
+go build -o bedrock-to-java ./cmd/bedrock-to-java
+
+# 转换并可选修复邻接属性
+./bedrock-to-java -input <Bedrock 世界副本> -output <新建或空的目录> [-dims 0,1,2] [-fix] [-strict]
+
+# 对已有 Java 世界只修复邻接属性
+./bedrock-to-java -fix-only -output <Java 世界> [-dims 0,1,2]
+```
+
+`-dims` 是 Bedrock 维度编号，默认只导出主世界。
+命令结束时打印两步的报告，一行一个数字。
+
+`-strict` 在第一根转换失败的区块柱子处停止；默认继续处理其他柱子并在报告中列出失败项。转换模式的输出目录必须不存在或为空；`-fix-only` 则要求目录已经存在。转换并不保留全部游戏数据，物品、实体及世界元数据的支持范围见 [转换核心的能力一览](../../neomega-converter-core/README.md#能力一览)。写出的世界尚未经过完整的游戏内兼容性验证。
+
+## 在 Go 程序中组合
+
+模块导入路径是 `neomega-converter`，不包含目录前缀 `apps/`。一根柱子覆盖水平 16×16 的区域，内部按高度分成 16×16×16 的 section。
+
 
 整图导出先调用 `neomega-converter-core/export.ConvertWorld` 写出 Java 世界，再按需调用本模块的 `export.FixWorld`。
 转换返回时已刷新写入，修复读取的是 Java 数据，因此也能独立处理其他来源的 Java 世界。
 命令行负责最后提交或关闭目标世界。
 
-`export.FixWorld` 将柱子按行排列，只保留相邻三行的修复前数据，逐柱修复并写回改动。
-窗口不会重读已经写回的柱子，因此结果不受写回顺序影响。
 写回仅替换方块状态，保留区块及 section 的其他 NBT。
-发生错误时，之前的写入仍然保留；本函数不提供整图回滚。
+发生错误时，之前的写入仍然保留；`export.FixWorld` 不提供整图回滚。
 
 已持有内存转换结果时，使用 `FixChunk`。
-它通过 `fixpalette` 把固定 16³ 的调色板接入 fixer 的遍历与查询接口，再按返回修改复制和写回对应调色板。
+它返回修复后的方块调色板。
 实体、诊断、生物群系和未修改的 section 继续共享输入。
 八邻居必须是修复前的结果，顺序为西北、北、东北、西、东、西南、南、东南。
 
@@ -145,26 +167,4 @@ viewer 可以把取得的柱子适配成渲染 section。
 两种用途共用上述来源，邻居仍从原始 Bedrock 来源读取。
 转换和修复的语义及诊断含义见[转换核心说明](../../neomega-converter-core/README.md)与[修复规则](../../neomega-viewer-core/fixer/java-postprocess/FIXER.md)。
 
-## 命令行导出
-
-`cmd/bedrock-to-java` 把上面的两个导出步骤接成命令。
-LevelDB 打开时可能写文件，所以要对 Bedrock 存档的副本运行。
-
-```sh
-go build -o bedrock-to-java ./cmd/bedrock-to-java
-
-# 第 1 步；加 -fix 时接着跑第 2 步
-./bedrock-to-java -input <Bedrock 世界副本> -output <新建或空的目录> [-dims 0,1,2] [-fix] [-strict]
-
-# 只跑第 2 步，对已有的 Java 世界
-./bedrock-to-java -fix-only -output <Java 世界> [-dims 0,1,2]
-```
-
-`-dims` 是 Bedrock 维度编号，默认只导出主世界。
-命令结束时打印两步的报告，一行一个数字。
-
-## 检查
-
-在工作区根目录运行 `./check.sh neomega-converter-core apps/neomega-converter`。
-并发取消、原始邻居、缓存复用、修复写回和 CLI 都有对应测试。
-修复规则本身在 viewer-core 中验证。
+开发结构、依赖边界与验收命令见 [AGENTS.md](AGENTS.md)。更详细的调用场景和能力说明见 [转换指南](CONVERSION-GUIDE.md)。
