@@ -7,6 +7,7 @@ import (
 	repair "neomega-converter"
 	"neomega-converter-core"
 	coreadapt "neomega-converter-core/adapt"
+	"neomega-converter/fixpalette"
 	"neomega-viewer-core/fixer/java-postprocess"
 )
 
@@ -27,14 +28,14 @@ func NewFixed(src *coreadapt.Converted, f *fixer.Fixer, options coreadapt.Option
 		}
 		var neighbours [8]*converter.ConvertedChunk
 		for side, offset := range [8]celler.ChunkPos{
-			fixer.NW: {X: -1, Z: -1},
-			fixer.N:  {Z: -1},
-			fixer.NE: {X: 1, Z: -1},
-			fixer.W:  {X: -1},
-			fixer.E:  {X: 1},
-			fixer.SW: {X: -1, Z: 1},
-			fixer.S:  {Z: 1},
-			fixer.SE: {X: 1, Z: 1},
+			fixpalette.NW: {X: -1, Z: -1},
+			fixpalette.N:  {Z: -1},
+			fixpalette.NE: {X: 1, Z: -1},
+			fixpalette.W:  {X: -1},
+			fixpalette.E:  {X: 1},
+			fixpalette.SW: {X: -1, Z: 1},
+			fixpalette.S:  {Z: 1},
+			fixpalette.SE: {X: 1, Z: 1},
 		} {
 			neighbours[side], err = src.Chunk(ctx, celler.ChunkPos{
 				X: pos.X + offset.X,

@@ -39,7 +39,7 @@ viewer、Java 存档写出……
 
 ### 2.1 方块状态基础转换（不走 ConvertChunk）
 
-以下片段中，`bedrock`、`items` 与 `core` 来自 converter-core，`converter` 来自本模块，`fixer` 来自 viewer-core。
+以下片段中，`bedrock`、`items` 与 `core` 来自 converter-core，`converter` 来自本模块，`fixer` 来自 viewer-core，`fixpalette` 来自本模块的 `neomega-converter/fixpalette`。
 
 适用：只想转换单个 Bedrock 方块状态，不需要 NBT 或邻居。
 
@@ -122,14 +122,14 @@ javaItem := items.ConvertItem(bedrockItemCompound)
 ```go
 f, err := fixer.New()
 fixed := converter.FixChunk(f, center, [8]*core.ConvertedChunk{
-    fixer.NW: nwChunk, fixer.N: nChunk, /* … */
+    fixpalette.NW: nwChunk, fixpalette.N: nChunk, /* … */
 })
 ```
 邻居为 nil 时，对应方向按空气处理。
 
 **单 section 版**（viewer 的上传预览，没有完整区块上下文）：
 ```go
-fixed := f.FixSection(section, [6]*layer_storage.Palette[ir.IRBlock]{
+fixed := fixpalette.FixSection(f, section, [6]*layer_storage.Palette[ir.IRBlock]{
     // west, east, down, up, north, south
     nil, nil, nil, nil, nil, nil,
 })

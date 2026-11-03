@@ -19,6 +19,7 @@ import (
 	repair "neomega-converter"
 	"neomega-converter-core"
 	coreadapt "neomega-converter-core/adapt"
+	"neomega-converter/fixpalette"
 	"neomega-viewer-core/fixer/java-postprocess"
 )
 
@@ -147,7 +148,7 @@ func TestFixedUsesUnfixedNeighbours(t *testing.T) {
 	fixedEast := getChunk(t, fixed, east)
 	assertState(t, blockAt(rawEast, 0, 8), "shape", "straight")
 	assertState(t, blockAt(fixedEast, 0, 8), "shape", "inner_left")
-	wrong := repair.FixChunk(f, rawWest, [8]*converter.ConvertedChunk{fixer.E: fixedEast})
+	wrong := repair.FixChunk(f, rawWest, [8]*converter.ConvertedChunk{fixpalette.E: fixedEast})
 	assertState(t, blockAt(wrong, 15, 8), "east", "true")
 	got := getChunk(t, fixed, west)
 	assertState(t, blockAt(got, 15, 8), "east", "false")

@@ -9,6 +9,7 @@ import (
 	"celler/layer_storage"
 	"neomega-blocks/ir"
 	core "neomega-converter-core"
+	"neomega-converter/fixpalette"
 	nbt "neomega-nbt/presets/v1"
 	fixer "neomega-viewer-core/fixer/java-postprocess"
 )
@@ -36,7 +37,7 @@ func TestFixChunkPreservesMetadataAndOwnership(t *testing.T) {
 		Diagnostics:   []core.Diagnostic{{Kind: core.UnknownBlock, Count: 2}},
 	}
 	neighbour := &core.ConvertedChunk{Sections: map[int32]*core.ConvertedSection{0: {Blocks: east}}}
-	fixed := FixChunk(f, center, [8]*core.ConvertedChunk{fixer.E: neighbour})
+	fixed := FixChunk(f, center, [8]*core.ConvertedChunk{fixpalette.E: neighbour})
 	if fixed.Sections[0].Blocks.Get(at).States().GetDefault("east", "false") != "true" {
 		t.Fatal("未使用邻居修复栅栏连接")
 	}

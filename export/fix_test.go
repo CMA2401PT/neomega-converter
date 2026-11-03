@@ -12,6 +12,7 @@ import (
 	repair "neomega-converter"
 	"neomega-converter-core"
 	coreexport "neomega-converter-core/export"
+	"neomega-converter/fixpalette"
 	nbt "neomega-nbt/presets/v1"
 	"neomega-viewer-core/fixer/java-postprocess"
 )
@@ -130,12 +131,12 @@ func TestFixWorldUsesOriginalNeighbours(t *testing.T) {
 		{
 			name: "same row", delta: celler.ChunkPos{X: 1},
 			firstEdge: layer_storage.At(15, 5, 8), secondEdge: layer_storage.At(0, 5, 8),
-			firstFacing: "north", lastFacing: "south", forward: fixer.E, backward: fixer.W,
+			firstFacing: "north", lastFacing: "south", forward: fixpalette.E, backward: fixpalette.W,
 		},
 		{
 			name: "cross row", delta: celler.ChunkPos{Z: 1},
 			firstEdge: layer_storage.At(8, 5, 15), secondEdge: layer_storage.At(8, 5, 0),
-			firstFacing: "east", lastFacing: "west", forward: fixer.S, backward: fixer.N,
+			firstFacing: "east", lastFacing: "west", forward: fixpalette.S, backward: fixpalette.N,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
