@@ -209,6 +209,8 @@ func printReport(output io.Writer, report export.Report, level export.LevelRepor
 		converter.NBTError,
 		converter.RuleError,
 		converter.UnsupportedBlockEntity,
+		converter.UnknownEntity,
+		converter.UnknownItem,
 	} {
 		fmt.Fprintf(output, "convert.diagnostic.%s=%d\n", kind, report.Diagnostics[kind])
 	}
@@ -217,6 +219,9 @@ func printReport(output io.Writer, report export.Report, level export.LevelRepor
 	}
 	for _, state := range report.UnknownStates {
 		fmt.Fprintf(output, "unknown %s=%d\n", state.State, state.Count)
+	}
+	for _, item := range report.UnknownItems {
+		fmt.Fprintf(output, "unknown_item %s=%d\n", item.Item, item.Count)
 	}
 	ids := make([]string, 0, len(report.UnsupportedBlockEntities))
 	for id := range report.UnsupportedBlockEntities {
