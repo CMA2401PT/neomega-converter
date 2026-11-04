@@ -70,10 +70,13 @@ converted, err := bedrock.ConvertChunk(src)
 // converted.Diagnostics          → 未知方块、NBT 错误等
 ```
 
-包含：方块调色板转换、含水、所有已注册的方块实体规则（床、花盆、旗帜、潜影盒、
-唱片机、讲台、音符盒 note、头颅、箱子双箱配对 + 物品、告示牌）。
+包含：方块调色板转换、含水、生物群系（Data3D/2D）、已注册的方块实体规则
+（床、花盆、旗帜底色与图案、潜影盒、唱片机、讲台、音符盒、头颅、箱子/木桶/漏斗等容器、
+熔炉、酿造台、信标、刷怪笼、营火、命令方块、末地门、饰纹罐、告示牌），
+以及 0x32 记录里的普通实体。
 
-不包含：邻接状态（栅栏连接、楼梯拐角等）、生物群系、普通实体。
+不包含：邻接状态（栅栏连接、楼梯拐角等）；digp 实体要用 `ConvertChunkWithActors`
+传入，整图导出已经这么做。
 
 ---
 
@@ -107,10 +110,12 @@ javaItem := items.ConvertItem(bedrockItemCompound)
 // nil 表示无法完整转换，调用方跳过该条目
 ```
 
-支持：方块物品（Block compound、legacy data value 或名称转出 Java 方块）、药水/药水箭（potionIDs 编号表）、
-书本（written_book/writable_book）、附魔。
+支持：方块物品（Block compound、legacy data value 或名称转出 Java 方块）、
+非方块物品（`third_party` 的物品表，来源见 [third_party/README.md](../../neomega-converter-core/third_party/README.md)）、
+药水/药水箭、书本、附魔、耐久、自定义名称、lore、皮革颜色、无法破坏、修复成本、嵌套容器。
 
-不支持：工具/武器/盔甲/食物（需要 Bedrock→Java 物品名映射表，见 `neomega-converter-core/bedrock/items/doc.go`）、嵌套容器。
+仍缺：`trim`、属性修饰、`CanPlaceOn`/`CanDestroy`、烟花与地图内容、自定义药水效果；
+物品表查不到的名字整条跳过。
 
 ---
 
@@ -178,46 +183,38 @@ fixReport = export.FixWorld(javaWorld, fixer, fixOptions)        // 可选，读
 
 ---
 
-## 三、还没实现的，以及为什么
+## 三、实现范围与仍缺的部分
 
-### 3.1 物品：非方块普通物品
+### 3.1 物品
 
-**现状**：工具、武器、盔甲、食物等在箱子中整条跳过。
+**现状**：已接入物品名表。方块物品仍走方块表，非方块物品查
+`neomega-converter-core/third_party` 的表；表由 GeyserMC/mappings 生成，
+版本与 sha256 固定在锁文件里。
 
-**卡在哪**：需要 Bedrock→Java 物品名映射表。这张表的来源是 GeyserMC/mappings，
-mcconv 在 `tools/gendata/main.go` 从那里生成 `Tables.ItemBedrockToJava`。
-我们没有自己复现这个生成流程，因此不直接使用该数据。
+组件已覆盖：附魔（含附魔书的 `stored_enchantments`）、耐久、自定义名称、lore、
+皮革颜色、无法破坏、修复成本、嵌套容器、药水与书本。
 
-**mcconv 的做法**：`bedrockToJava` 先查 `ItemBedrockToJava(name, aux)` 得到 Java id，
-再处理附魔、耐久等字段。覆盖范围见 `convert/items.go`。
+**仍缺**：
 
-**接入路径**：在 neomega-blocks 或 neomega-converter 里生成一张物品名映射表，
-数据来源使用 GeyserMC/mappings，自行复现生成流程（不复制 mcconv 的输出文件）。
-生成完成后扩展 `items.ConvertItem` 的第三分支即可。
+- `trim`、属性修饰、`CanPlaceOn`/`CanDestroy`、烟花、地图内容；
+- 自定义药水效果只保留基础药水种类；
+- 物品表查不到的名字整条跳过，不会原样透传到 Java。
 
----
+### 3.2 方块实体
 
-### 3.2 物品：嵌套容器（背包里的潜影盒）
+**现状**：床、花盆、旗帜（底色与图案）、潜影盒、唱片机、讲台、音符盒、头颅、
+箱子/木桶/漏斗/发射器/投掷器/末影箱、熔炉三兄弟、酿造台、信标、刷怪笼、营火、
+命令方块、末地门、饰纹罐和展示框都已接入。
 
-**现状**：带 `tag.Items` 的物品（潜影盒物品形态）整条跳过。
-
-**卡在哪**：递归依赖 `ConvertItem` 自身，需要等 3.1 完成后一起接入。
-
----
+**仍缺**：蜂巢、拼图方块、结构方块、试炼刷怪笼、宝库；命令方块只复制命令原文，
+玩家头颅的皮肤 profile 不保留。
 
 ### 3.3 生物群系
 
-**现状**：`ConvertedSection.Biomes` 字段存在但始终为 nil。
+**现状**：已实现。优先 Data3D，缺失时用 Data2D；未知编号和缺失 section 回退 plains，
+保证写出的 section 都有 `biomes` 字段。映射表同样来自 `third_party`。
 
-**卡在哪**：需要 Bedrock→Java 生物群系 ID 映射。celler/bedrock 可以读 Biomes3D，
-但 Java 用字符串 ID，Bedrock 用整数，需要一张对照表。
-mcconv 在 `translate/tables.go` 用 GeyserMC/mappings 和 pmmp/BedrockData 生成这张表。
-
-**留位**：`neomega-converter-core/bedrock/biomes/`，等数据来源确定后接入。
-
----
-
-### 3.4 展示框：方块实体变成 Java 实体
+### 3.4 展示框
 
 **现状**：已转换。`neomega-converter-core/bedrock/blockentities/item_frame` 把展示框所在格子转成空气，
 并在 `ConvertedChunk.Entities` 里产出 Java `minecraft:item_frame` / `minecraft:glow_item_frame` 实体。
@@ -237,31 +234,24 @@ Java 的展示框不是方块，是实体，存放在 `entities/` 目录的 regi
 字段对应（参照 mcconv `internal/convert/entities.go` 的 frames 部分）：
 
 - `facing_direction` 0..5 与 Java `Facing` 编号相同（下、上、北、南、西、东）。
-- `Pos` 是方块中心沿朝向反方向偏移 0.46875；方块坐标写 `TileX/TileY/TileZ`（1.21.4 的写法，1.21.5 起改为 `block_pos`）。
+- `Pos` 是方块中心沿朝向反方向偏移 0.46875；方块坐标写 `TileX/TileY/TileZ`（1.21.4 的写法）。
 - `Item` 用 `items.ConvertItem` 转换，去掉 `Slot`；`ItemRotation` 是角度，除以 45 取整到 0..7；`ItemDropChance` 缺省为 1。
 - `UUID` 由世界坐标和维度确定性生成，重复导出得到相同的实体，不同维度同一坐标也不会重号。
 
 **还缺的部分**：
 
-- 框里的地图会丢失，展示框本身保留。地图不是方块物品，`items.ConvertItem` 转不出（见 3.1），地图内容还需要转换 `map_*.dat`。
-- `Rotation` 写 `[0, 0]`，没有按朝向写原版的 yaw/pitch。挂载面由 `Facing` 决定，没有在游戏里验证加载后是否需要它。
+- 地图物品能保留 id，但地图内容在 `map_*.dat` 里，图案与尺寸不转换。
+- `Rotation` 写 `[0, 0]`，没有按朝向写原版的 yaw/pitch。
 - `Fixed`、`Invisible` 等字段没有转换，取 Java 默认值。
 
----
+### 3.5 普通实体
 
-### 3.5 普通实体（生物、盔甲架等）
+**现状**：已实现。导出时按柱读取 `digp`/`actorprefix`，`ConvertChunk` 也会读 0x32；
+转换通用字段（位置、朝向、Motion、UUID、名称、标签、生命、装备、持久化、幼年），
+以及掉落物、船/运输船和下落方块的少量特例。
 
-**现状**：celler/bedrock 只有 `TagEntities` 常量，没有读取接口。
-
-**卡在哪**：两个层面都缺失。一是 celler 没有暴露读 actor/digp 记录的 API；
-二是实体字段的语义转换本身复杂（生物、盔甲架的格式差异很大）。
-
-**mcconv 的做法**：`convert/entities.go` 单独处理普通实体，
-从 bedrock/world.go 的 actor/digp 记录读取，写入独立的 Java entities region。
-
-**留位**：`neomega-converter-core/bedrock/actors/`，等 celler 暴露读取接口后接入。
-
----
+**仍缺**：村民交易、乘骑乘客、宠物主人、盔甲架姿势、生物变种的类型专属字段；
+不认识的实体标识记 `unknown_entity` 后跳过。
 
 ### 3.6 整图导出
 
@@ -272,17 +262,15 @@ Java 的展示框不是方块，是实体，存放在 `entities/` 目录的 regi
 **还缺的部分**：
 
 - 并行。两个步骤都是单线程。
+- 未完成柱子默认跳过，`-all-chunks` 才会转换。
 - 写出格式没有在游戏里加载验证，待确认的字段见 README。
 
 ---
 
 ## 四、旗帜图案
 
-**现状**：旗帜底色已转换（颜色在方块名里），图案 NBT（`patterns` 列表）整条丢弃。
-
-**卡在哪**：需要 Bedrock 图案代码 → Java 图案名的映射表，
-来源是 pmmp/BedrockData，mcconv 内嵌在 `translate/tables.go`。
-viewer 目前只能画纯色旗帜（TBD.md 有记录）。
+**现状**：已实现。底色进方块名，`Patterns` 转成方块实体的 `{pattern, color}`；
+未知图案代码跳过，上游表缺的 globe/piglin/flow/guster 由规则补齐。
 
 ---
 
