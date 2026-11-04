@@ -1,6 +1,6 @@
 # neomega-converter
 
-`neomega-converter` 把 Bedrock 存档转换为 Java 存档，并可按邻居补全栅栏连接、楼梯拐角等方块属性。它既提供命令行导出，也提供按区块坐标读取的缓存来源，供浏览器或区域导出使用。
+`neomega-converter` 在 Bedrock 与 Java 存档之间转换；Bedrock → Java 时还可按邻居补全栅栏连接、楼梯拐角等方块属性。它既提供命令行导出，也提供按区块坐标读取的缓存来源，供浏览器或区域导出使用。
 
 转换来自 [neomega-converter-core](../../neomega-converter-core/README.md)，邻接修复来自 [viewer-core 的 fixer](../../neomega-viewer-core/fixer/java-postprocess/README.md)。两者由本模块组合，调用方可以只转换，也可以转换后修复，或单独修复已有 Java 世界。
 
@@ -27,6 +27,19 @@ go build -o bedrock-to-java ./cmd/bedrock-to-java
 命令结束时打印两步的报告，一行一个数字。
 
 `-strict` 在第一根转换失败的区块柱子处停止；默认继续处理其他柱子并在报告中列出失败项。转换模式的输出目录必须不存在或为空；`-fix-only` 则要求目录已经存在。转换并不保留全部游戏数据，物品、实体及世界元数据的支持范围见 [转换核心的能力一览](../../neomega-converter-core/README.md#能力一览)。写出的世界尚未经过完整的游戏内兼容性验证。
+
+### 反方向：Java → Bedrock
+
+`cmd/java-to-bedrock` 把 Java 1.21.4 存档转成 Bedrock 1.21.50。
+目标目录必须不存在或为空。
+
+```sh
+go build -o java-to-bedrock ./cmd/java-to-bedrock
+./java-to-bedrock -input <Java 世界> -output <新建或空的目录> [-dims 0,1,2] [-strict]
+```
+
+目前写出方块、群系、level.dat 和箱子/熔炉/旗帜/告示牌方块实体；普通实体和其他方块实体还在补。
+`-strict` 在第一根失败的柱子处停止，默认继续并列出失败项。
 
 ## 在 Go 程序中组合
 
