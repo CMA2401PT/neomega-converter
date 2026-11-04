@@ -16,13 +16,14 @@ LevelDB 打开时可能写文件，所以要对 Bedrock 存档的副本运行。
 go build -o bedrock-to-java ./cmd/bedrock-to-java
 
 # 转换并可选修复邻接属性
-./bedrock-to-java -input <Bedrock 世界副本> -output <新建或空的目录> [-dims 0,1,2] [-fix] [-strict]
+./bedrock-to-java -input <Bedrock 世界副本> -output <新建或空的目录> [-dims 0,1,2] [-all-chunks] [-fix] [-strict]
 
 # 对已有 Java 世界只修复邻接属性
 ./bedrock-to-java -fix-only -output <Java 世界> [-dims 0,1,2]
 ```
 
 `-dims` 是 Bedrock 维度编号，默认只导出主世界。
+`-all-chunks` 也转换未生成完成的柱子；默认按 0x36 记录的 FinalizedState 跳过。
 命令结束时打印两步的报告，一行一个数字。
 
 `-strict` 在第一根转换失败的区块柱子处停止；默认继续处理其他柱子并在报告中列出失败项。转换模式的输出目录必须不存在或为空；`-fix-only` 则要求目录已经存在。转换并不保留全部游戏数据，物品、实体及世界元数据的支持范围见 [转换核心的能力一览](../../neomega-converter-core/README.md#能力一览)。写出的世界尚未经过完整的游戏内兼容性验证。

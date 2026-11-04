@@ -33,7 +33,7 @@ func run(args []string, output io.Writer) (err error) {
 	flags.SetOutput(output)
 	flags.Usage = func() {
 		fmt.Fprintln(output, "Bedrock → Java 1.21.4。LevelDB 打开时可能写文件，请对 Bedrock 存档副本运行。")
-		fmt.Fprintln(output, "转换：bedrock-to-java -input <Bedrock 世界> -output <新建或空的 Java 世界> [-dims 0,1,2] [-fix] [-strict]")
+		fmt.Fprintln(output, "转换：bedrock-to-java -input <Bedrock 世界> -output <新建或空的 Java 世界> [-dims 0,1,2] [-all-chunks] [-fix] [-strict]")
 		fmt.Fprintln(output, "仅修复：bedrock-to-java -fix-only -output <已有 Java 世界> [-dims 0,1,2]")
 		fmt.Fprintln(output, "-fix-only 与 -input、-fix 互斥；只修复指定维度，不读取 Bedrock 或改写 level.dat。")
 		flags.PrintDefaults()
@@ -44,6 +44,7 @@ func run(args []string, output io.Writer) (err error) {
 	fix := flags.Bool("fix", false, "写出后独立读取 Java 世界并修复邻接状态")
 	fixOnly := flags.Bool("fix-only", false, "只修复已有 Java 世界的邻接状态")
 	strict := flags.Bool("strict", false, "遇到第一根转换失败的柱子立即返回")
+	allChunks := flags.Bool("all-chunks", false, "也转换未生成完成的柱子；默认跳过")
 	if err = flags.Parse(args); errors.Is(err, flag.ErrHelp) {
 		return nil
 	} else if err != nil {
@@ -102,7 +103,7 @@ func run(args []string, output io.Writer) (err error) {
 	report, err := export.ConvertWorld(
 		source,
 		target,
-		export.ConvertOptions{Dimensions: dimensions, Strict: *strict},
+		export.ConvertOptions{Dimensions: dimensions, Strict: *strict, IncludeUnfinished: *allChunks},
 	)
 	printReport(output, report, levelReport)
 	if err != nil {
@@ -200,6 +201,7 @@ func printReport(output io.Writer, report export.Report, level export.LevelRepor
 		fmt.Fprintf(output, "convert.dimension.%d.dropped_sections=%d\n", dim, report.DroppedSections[int32(dim)])
 	}
 	fmt.Fprintf(output, "convert.failed_chunks=%d\n", len(report.FailedChunks))
+	fmt.Fprintf(output, "convert.skipped_chunks=%d\n", report.Skipped)
 	fmt.Fprintf(output, "convert.block_entities=%d\n", report.BlockEntities)
 	fmt.Fprintf(output, "convert.entities=%d\n", report.Entities)
 	for _, kind := range []converter.DiagnosticKind{
