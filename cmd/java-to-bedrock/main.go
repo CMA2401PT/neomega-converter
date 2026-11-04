@@ -121,6 +121,7 @@ func printReport(output io.Writer, report javaexport.Report, level javaexport.Le
 	for _, dimension := range dimensions {
 		fmt.Fprintf(output, "convert.dimension.%d.chunks=%d\n", dimension, report.Chunks[int32(dimension)])
 	}
+	fmt.Fprintf(output, "convert.entities=%d\n", report.Entities)
 	fmt.Fprintf(output, "convert.failed_chunks=%d\n", len(report.FailedChunks))
 	for _, failure := range report.FailedChunks {
 		fmt.Fprintf(output, "failed dimension=%d x=%d z=%d: %v\n", failure.Dimension, failure.Pos.X, failure.Pos.Z, failure.Err)
