@@ -98,7 +98,7 @@ func TestRun(t *testing.T) {
 	if err = run([]string{"-input", input, "-output", filepath.Join(t.TempDir(), "java")}, &output); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(output.String(), "level.defaulted_fields=9\n") {
+	if !strings.Contains(output.String(), "level.defaulted_fields=14\n") {
 		t.Fatal(output.String())
 	}
 }
