@@ -14,6 +14,7 @@ import (
 	cellerbedrock "celler/bedrock"
 	cellerjava "celler/java"
 	"neomega-converter-core"
+	javaactors "neomega-converter-core/je2be/actors"
 	bedrockexport "neomega-converter-core/je2be/export"
 )
 
@@ -36,6 +37,7 @@ func run(args []string, output io.Writer) error {
 	targetPath := flags.String("output", "", "Bedrock 世界目录：必须不存在或为空")
 	dimensionText := flags.String("dims", "0", "维度编号，逗号分隔：0,1,2")
 	strict := flags.Bool("strict", false, "遇到第一根失败的柱子立即返回")
+	entityDefs := flags.String("entity-defs", "", "可选：mcconv 格式的 bedrock_entities.json")
 	if err := flags.Parse(args); errors.Is(err, flag.ErrHelp) {
 		return nil
 	} else if err != nil {
@@ -48,6 +50,11 @@ func run(args []string, output io.Writer) error {
 	dimensions, err := parseDimensions(*dimensionText)
 	if err != nil {
 		return err
+	}
+	if *entityDefs != "" {
+		if err := javaactors.LoadEntityDefs(*entityDefs); err != nil {
+			return err
+		}
 	}
 	if err := prepareOutput(*targetPath); err != nil {
 		return err

@@ -35,11 +35,13 @@ go build -o bedrock-to-java ./cmd/bedrock-to-java
 
 ```sh
 go build -o java-to-bedrock ./cmd/java-to-bedrock
-./java-to-bedrock -input <Java 世界> -output <新建或空的目录> [-dims 0,1,2] [-strict]
+./java-to-bedrock -input <Java 世界> -output <新建或空的目录> [-dims 0,1,2] [-strict] [-entity-defs <bedrock_entities.json>]
 ```
 
 目前写出方块、群系、level.dat 和箱子/熔炉/旗帜/告示牌方块实体；普通实体和其他方块实体还在补。
 `-strict` 在第一根失败的柱子处停止，默认继续并列出失败项。
+`-entity-defs` 可加载 mcconv 格式的 `bedrock_entities.json`，给实体补 spawn/born 组和
+health 的 Base/Max；没有这张表时实体使用 Bedrock 默认行为。
 
 ## 在 Go 程序中组合
 
