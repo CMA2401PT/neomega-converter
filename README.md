@@ -68,7 +68,7 @@ go build -o java-to-bedrock ./cmd/java-to-bedrock
 不存在的柱子返回 `nil, nil`。
 
 只需要转换结果时，使用 `Converted`。
-它调用读取回调取得 Bedrock 柱子，再执行 `bedrock.ConvertChunk`。
+它调用读取回调取得 Bedrock 柱子，再执行 `be2je.ConvertChunk`。
 需要邻接状态时，在它上面接一个 `Fixed`。
 `Fixed` 从同一个 `Converted` 取得中心及八个邻居，再调用 `FixChunk`。
 两种来源都实现 `ChunkSource`，消费方可以使用同一套读取代码。

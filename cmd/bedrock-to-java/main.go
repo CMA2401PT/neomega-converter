@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	cellerbedrock "celler/bedrock"
-	"celler/java"
+	cellerjava "celler/java"
 	"neomega-converter-core"
 	"neomega-converter-core/export"
 	postprocess "neomega-converter/export"
@@ -83,7 +83,7 @@ func run(args []string, output io.Writer) (err error) {
 		return err
 	}
 	defer func() { err = errors.Join(err, source.Close()) }()
-	target, err := java.OpenDirectory(*targetPath, java.Options{})
+	target, err := cellerjava.OpenDirectory(*targetPath, cellerjava.Options{})
 	if err != nil {
 		return err
 	}
@@ -122,7 +122,7 @@ func runFixOnly(directory string, dimensions []int32, output io.Writer) (err err
 	if _, err = os.Stat(directory); err != nil {
 		return err
 	}
-	target, err := java.OpenDirectory(directory, java.Options{})
+	target, err := cellerjava.OpenDirectory(directory, cellerjava.Options{})
 	if err != nil {
 		return err
 	}
@@ -133,13 +133,13 @@ func runFixOnly(directory string, dimensions []int32, output io.Writer) (err err
 	return target.Commit()
 }
 
-func fixWorld(target *java.World, dimensions []int32, output io.Writer) error {
+func fixWorld(target *cellerjava.World, dimensions []int32, output io.Writer) error {
 	// 两种修复入口共用编号映射与报告，修复始终只依赖 Java 世界中的数据。
 	f, err := fixer.New()
 	if err != nil {
 		return err
 	}
-	javaDims := make([]java.Dimension, 0, len(dimensions))
+	javaDims := make([]cellerjava.Dimension, 0, len(dimensions))
 	for _, dim := range dimensions {
 		mapped, _ := export.JavaDimension(dim)
 		javaDims = append(javaDims, mapped)

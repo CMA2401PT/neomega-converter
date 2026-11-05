@@ -6,7 +6,7 @@ import (
 	"slices"
 
 	"celler"
-	"celler/java"
+	cellerjava "celler/java"
 	"celler/layer_storage"
 	"neomega-blocks/ir"
 	repair "neomega-converter"
@@ -17,7 +17,7 @@ import (
 
 type FixOptions struct {
 	// 空列表选择主世界；独立修复入口也允许 Java 自定义维度目录。
-	Dimensions []java.Dimension
+	Dimensions []cellerjava.Dimension
 }
 
 type FixReport struct {
@@ -32,21 +32,21 @@ type fixRow struct {
 	positions []celler.ChunkPos
 }
 
-func FixWorld(world *java.World, f *fixer.Fixer, options FixOptions) (report FixReport, err error) {
+func FixWorld(world *cellerjava.World, f *fixer.Fixer, options FixOptions) (report FixReport, err error) {
 	// 窗口保留写回前的原值，使逐柱写回不会改变后续修复的邻居。
 	defer func() { err = errors.Join(err, world.Flush()) }()
 	dimensions := options.Dimensions
 	if len(dimensions) == 0 {
-		dimensions = []java.Dimension{java.Overworld}
+		dimensions = []cellerjava.Dimension{cellerjava.Overworld}
 	}
-	seen := make(map[java.Dimension]bool)
+	seen := make(map[cellerjava.Dimension]bool)
 	for _, dim := range dimensions {
 		if seen[dim] {
 			continue
 		}
 		seen[dim] = true
 		var positions []celler.ChunkPos
-		err = world.Scan(dim, java.Terrain, func(pos celler.ChunkPos) error {
+		err = world.Scan(dim, cellerjava.Terrain, func(pos celler.ChunkPos) error {
 			positions = append(positions, pos)
 			return nil
 		})
@@ -116,8 +116,8 @@ func FixWorld(world *java.World, f *fixer.Fixer, options FixOptions) (report Fix
 }
 
 func readFixBlocks(
-	world *java.World,
-	dim java.Dimension,
+	world *cellerjava.World,
+	dim cellerjava.Dimension,
 	pos celler.ChunkPos,
 ) (*converter.ConvertedChunk, error) {
 	// 窗口只持有方块调色板，完整 NBT 留到实际写回时重新读取。
@@ -143,13 +143,13 @@ func readFixBlocks(
 }
 
 func writeFixedBlocks(
-	world *java.World,
-	dim java.Dimension,
+	world *cellerjava.World,
+	dim cellerjava.Dimension,
 	center *converter.ConvertedChunk,
 	fixed *converter.ConvertedChunk,
 ) (uint64, error) {
 	// 惰性重读保留未修改的 NBT，写回对象不进入原值窗口。
-	var chunk *java.Chunk
+	var chunk *cellerjava.Chunk
 	var changed uint64
 	for y, section := range fixed.Sections {
 		if section.Blocks == center.Sections[y].Blocks {
@@ -175,7 +175,7 @@ func writeFixedBlocks(
 	return changed, nil
 }
 
-func replaceBlocks(chunk *java.Chunk, y int32, blocks *layer_storage.Palette[ir.IRBlock]) error {
+func replaceBlocks(chunk *cellerjava.Chunk, y int32, blocks *layer_storage.Palette[ir.IRBlock]) error {
 	// SetSection 会重编码生物群系；只取它编码出的方块字段，其他 NBT 保持磁盘原值。
 	section, err := chunk.Section(y)
 	if err != nil {

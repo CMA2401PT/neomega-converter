@@ -10,7 +10,7 @@ import (
 
 	"celler"
 	cellerbedrock "celler/bedrock"
-	"celler/java"
+	cellerjava "celler/java"
 	"celler/layer_storage"
 	"neomega-blocks/ir"
 	converts "neomega-blocks/presets/block-converts/v1"
@@ -60,7 +60,7 @@ func TestRun(t *testing.T) {
 		if !strings.Contains(output.String(), "convert.dimension.0.chunks=1\n") || strings.Contains(output.String(), "fix.chunks=1\n") != fix {
 			t.Fatal(output.String())
 		}
-		world, err := java.OpenDirectory(target, java.Options{ReadOnly: true})
+		world, err := cellerjava.OpenDirectory(target, cellerjava.Options{ReadOnly: true})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -71,7 +71,7 @@ func TestRun(t *testing.T) {
 		if level.Value["Data"].(nbt.Compound)["DataVersion"] != export.DataVersion {
 			t.Fatal(level)
 		}
-		if _, err = world.ReadChunk(java.Overworld, celler.ChunkPos{}); err != nil {
+		if _, err = world.ReadChunk(cellerjava.Overworld, celler.ChunkPos{}); err != nil {
 			t.Fatal(err)
 		}
 		if err = world.Close(); err != nil {
@@ -108,23 +108,23 @@ func TestRunFixOnly(t *testing.T) {
 	for _, test := range []struct {
 		name      string
 		dims      string
-		selected  map[java.Dimension]bool
+		selected  map[cellerjava.Dimension]bool
 		withLevel bool
 	}{
 		{
 			name:      "default overworld",
-			selected:  map[java.Dimension]bool{java.Overworld: true},
+			selected:  map[cellerjava.Dimension]bool{cellerjava.Overworld: true},
 			withLevel: true,
 		},
 		{
 			name:     "nether and end without level",
 			dims:     "1,2",
-			selected: map[java.Dimension]bool{java.Nether: true, java.End: true},
+			selected: map[cellerjava.Dimension]bool{cellerjava.Nether: true, cellerjava.End: true},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			directory := t.TempDir()
-			world, err := java.OpenDirectory(directory, java.Options{})
+			world, err := cellerjava.OpenDirectory(directory, cellerjava.Options{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -132,12 +132,12 @@ func TestRunFixOnly(t *testing.T) {
 			if !ok {
 				t.Fatal("missing fence state")
 			}
-			for _, dim := range []java.Dimension{java.Overworld, java.Nether, java.End} {
+			for _, dim := range []cellerjava.Dimension{cellerjava.Overworld, cellerjava.Nether, cellerjava.End} {
 				blocks := layer_storage.MakePaletteStorage(ir.IRBlock("minecraft:air []"))
 				blocks.Set(layer_storage.At(5, 5, 5), fence)
 				blocks.Set(layer_storage.At(6, 5, 5), fence)
-				chunk := java.NewChunk(celler.ChunkPos{}, export.DataVersion)
-				if err = chunk.SetSection(&java.Section{Y: 0, Blocks: blocks}); err != nil {
+				chunk := cellerjava.NewChunk(celler.ChunkPos{}, export.DataVersion)
+				if err = chunk.SetSection(&cellerjava.Section{Y: 0, Blocks: blocks}); err != nil {
 					t.Fatal(err)
 				}
 				if err = world.WriteChunk(dim, chunk); err != nil {
@@ -174,7 +174,7 @@ func TestRunFixOnly(t *testing.T) {
 			} else if !os.IsNotExist(err) {
 				t.Fatalf("unexpected level.dat: %v", err)
 			}
-			reader, err := java.OpenDirectory(directory, java.Options{ReadOnly: true})
+			reader, err := cellerjava.OpenDirectory(directory, cellerjava.Options{ReadOnly: true})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -183,7 +183,7 @@ func TestRunFixOnly(t *testing.T) {
 					t.Error(err)
 				}
 			})
-			for _, dim := range []java.Dimension{java.Overworld, java.Nether, java.End} {
+			for _, dim := range []cellerjava.Dimension{cellerjava.Overworld, cellerjava.Nether, cellerjava.End} {
 				chunk, err := reader.ReadChunk(dim, celler.ChunkPos{})
 				if err != nil {
 					t.Fatal(err)

@@ -14,7 +14,7 @@ import (
 	cellerbedrock "celler/bedrock"
 	cellerjava "celler/java"
 	"neomega-converter-core"
-	javaexport "neomega-converter-core/java/export"
+	bedrockexport "neomega-converter-core/je2be/export"
 )
 
 func main() {
@@ -61,7 +61,7 @@ func run(args []string, output io.Writer) error {
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	convertedLevel, levelReport := javaexport.ConvertLevel(level)
+	convertedLevel, levelReport := bedrockexport.ConvertLevel(level)
 	target, err := cellerbedrock.Open(*targetPath, cellerbedrock.Options{})
 	if err != nil {
 		return err
@@ -70,7 +70,7 @@ func run(args []string, output io.Writer) error {
 	if err = target.WriteLevel(convertedLevel); err != nil {
 		return err
 	}
-	report, err := javaexport.ConvertWorld(source, target, javaexport.ConvertOptions{
+	report, err := bedrockexport.ConvertWorld(source, target, bedrockexport.ConvertOptions{
 		Dimensions: dimensions,
 		Strict:     *strict,
 	})
@@ -112,7 +112,7 @@ func prepareOutput(directory string) error {
 	return nil
 }
 
-func printReport(output io.Writer, report javaexport.Report, level javaexport.LevelReport) {
+func printReport(output io.Writer, report bedrockexport.Report, level bedrockexport.LevelReport) {
 	dimensions := make([]int, 0, len(report.Chunks))
 	for dimension := range report.Chunks {
 		dimensions = append(dimensions, int(dimension))

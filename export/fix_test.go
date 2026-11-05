@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"celler"
-	"celler/java"
+	cellerjava "celler/java"
 	"celler/layer_storage"
 	"neomega-blocks/ir"
 	converts "neomega-blocks/presets/block-converts/v1"
@@ -26,13 +26,13 @@ func javaState(t *testing.T, text string) ir.IRBlock {
 	return state
 }
 
-func writeConverted(t *testing.T, world *java.World, source *converter.ConvertedChunk) *java.Chunk {
+func writeConverted(t *testing.T, world *cellerjava.World, source *converter.ConvertedChunk) *cellerjava.Chunk {
 	t.Helper()
 	chunk, err := coreexport.ToJavaChunk(source, coreexport.DataVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = world.WriteChunk(java.Overworld, chunk); err != nil {
+	if err = world.WriteChunk(cellerjava.Overworld, chunk); err != nil {
 		t.Fatal(err)
 	}
 	return chunk
@@ -62,7 +62,7 @@ func TestFixWorldConnectionsAndNBT(t *testing.T) {
 		if err = chunk.SetSection(section); err != nil {
 			t.Fatal(err)
 		}
-		if err = chunk.SetSection(&java.Section{Y: 2, NBT: nbt.Compound{"SkyLight": nbt.Array([]int8{7, 8})}}); err != nil {
+		if err = chunk.SetSection(&cellerjava.Section{Y: 2, NBT: nbt.Compound{"SkyLight": nbt.Array([]int8{7, 8})}}); err != nil {
 			t.Fatal(err)
 		}
 		// 未使用的生物群系调色板条目也是原 NBT，写方块时不应顺便规范化它。
@@ -72,11 +72,11 @@ func TestFixWorldConnectionsAndNBT(t *testing.T) {
 			"data":    nbt.Array([]int64{0}),
 		}
 		chunk.NBT.Value["custom_root"] = nbt.Compound{"foo": "bar"}
-		if err = world.WriteChunk(java.Overworld, chunk); err != nil {
+		if err = world.WriteChunk(cellerjava.Overworld, chunk); err != nil {
 			t.Fatal(err)
 		}
 	}
-	before, err := world.ReadChunk(java.Overworld, celler.ChunkPos{})
+	before, err := world.ReadChunk(cellerjava.Overworld, celler.ChunkPos{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestFixWorldConnectionsAndNBT(t *testing.T) {
 		t.Fatalf("report=%+v err=%v", report, err)
 	}
 	for x := range int32(2) {
-		chunk, err := world.ReadChunk(java.Overworld, celler.ChunkPos{X: x})
+		chunk, err := world.ReadChunk(cellerjava.Overworld, celler.ChunkPos{X: x})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -105,7 +105,7 @@ func TestFixWorldConnectionsAndNBT(t *testing.T) {
 			t.Fatal("boundary fence disconnected")
 		}
 	}
-	after, err := world.ReadChunk(java.Overworld, celler.ChunkPos{})
+	after, err := world.ReadChunk(cellerjava.Overworld, celler.ChunkPos{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestFixWorldUsesOriginalNeighbours(t *testing.T) {
 				t.Fatalf("report=%+v err=%v", report, err)
 			}
 			for _, want := range []*converter.ConvertedChunk{fixedFirst, fixedSecond} {
-				chunk, err := world.ReadChunk(java.Overworld, want.Pos)
+				chunk, err := world.ReadChunk(cellerjava.Overworld, want.Pos)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -210,24 +210,24 @@ func TestFixWorldKeepsWrittenChangesOnLaterError(t *testing.T) {
 		javaState(t, `minecraft:oak_stairs ["shape"="inner_right"]`),
 	)
 	writeConverted(t, world, source)
-	before, err := world.ReadChunk(java.Overworld, source.Pos)
+	before, err := world.ReadChunk(cellerjava.Overworld, source.Pos)
 	if err != nil {
 		t.Fatal(err)
 	}
-	bad := java.NewChunk(celler.ChunkPos{}, coreexport.DataVersion)
+	bad := cellerjava.NewChunk(celler.ChunkPos{}, coreexport.DataVersion)
 	bad.NBT.Value["sections"] = []nbt.Compound{{"Y": int8(0), "block_states": "broken"}}
-	if err = world.WriteChunk(java.Nether, bad); err != nil {
+	if err = world.WriteChunk(cellerjava.Nether, bad); err != nil {
 		t.Fatal(err)
 	}
 	f, err := fixer.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	report, err := FixWorld(world, f, FixOptions{Dimensions: []java.Dimension{java.Overworld, java.Nether}})
+	report, err := FixWorld(world, f, FixOptions{Dimensions: []cellerjava.Dimension{cellerjava.Overworld, cellerjava.Nether}})
 	if err == nil || report.ChangedSections != 1 {
 		t.Fatalf("report=%+v err=%v", report, err)
 	}
-	after, err := world.ReadChunk(java.Overworld, source.Pos)
+	after, err := world.ReadChunk(cellerjava.Overworld, source.Pos)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,18 +263,18 @@ func TestFixWorldRowsMatchWholeDimension(t *testing.T) {
 			writeConverted(t, world, source)
 		}
 	}
-	lightOnly := java.NewChunk(celler.ChunkPos{X: 35, Z: 4}, coreexport.DataVersion)
-	if err := lightOnly.SetSection(&java.Section{Y: 0, NBT: nbt.Compound{"SkyLight": nbt.Array([]int8{7})}}); err != nil {
+	lightOnly := cellerjava.NewChunk(celler.ChunkPos{X: 35, Z: 4}, coreexport.DataVersion)
+	if err := lightOnly.SetSection(&cellerjava.Section{Y: 0, NBT: nbt.Compound{"SkyLight": nbt.Array([]int8{7})}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := world.WriteChunk(java.Overworld, lightOnly); err != nil {
+	if err := world.WriteChunk(cellerjava.Overworld, lightOnly); err != nil {
 		t.Fatal(err)
 	}
 
 	// 参考实现先从磁盘读完整个维度，所有 Fix 完成后才允许写回。
 	originals := make(map[celler.ChunkPos]*converter.ConvertedChunk)
-	err := world.Scan(java.Overworld, java.Terrain, func(pos celler.ChunkPos) error {
-		chunk, err := world.ReadChunk(java.Overworld, pos)
+	err := world.Scan(cellerjava.Overworld, cellerjava.Terrain, func(pos celler.ChunkPos) error {
+		chunk, err := world.ReadChunk(cellerjava.Overworld, pos)
 		if err != nil {
 			return err
 		}
@@ -320,12 +320,12 @@ func TestFixWorldRowsMatchWholeDimension(t *testing.T) {
 			}
 		}
 	}
-	report, err := FixWorld(world, f, FixOptions{Dimensions: []java.Dimension{java.Overworld, java.Overworld}})
+	report, err := FixWorld(world, f, FixOptions{Dimensions: []cellerjava.Dimension{cellerjava.Overworld, cellerjava.Overworld}})
 	if err != nil || report != expectedReport {
 		t.Fatalf("report=%+v want=%+v err=%v", report, expectedReport, err)
 	}
 	for pos, expected := range want {
-		chunk, err := world.ReadChunk(java.Overworld, pos)
+		chunk, err := world.ReadChunk(cellerjava.Overworld, pos)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -344,9 +344,9 @@ func TestFixWorldRowsMatchWholeDimension(t *testing.T) {
 	}
 }
 
-func openJava(t *testing.T) *java.World {
+func openJava(t *testing.T) *cellerjava.World {
 	t.Helper()
-	world, err := java.OpenDirectory(t.TempDir(), java.Options{})
+	world, err := cellerjava.OpenDirectory(t.TempDir(), cellerjava.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

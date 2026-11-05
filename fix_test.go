@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"celler"
-	"celler/java"
+	cellerjava "celler/java"
 	"celler/layer_storage"
 	"neomega-blocks/ir"
 	core "neomega-converter-core"
@@ -32,7 +32,7 @@ func TestFixChunkPreservesMetadataAndOwnership(t *testing.T) {
 		Pos:           celler.ChunkPos{X: -7, Z: 4},
 		Dimension:     2,
 		Sections:      map[int32]*core.ConvertedSection{0: {Blocks: blocks, Biomes: biomes}, 1: untouched},
-		BlockEntities: []java.BlockEntity{{NBT: nbt.Compound{"id": "test"}}},
+		BlockEntities: []cellerjava.BlockEntity{{NBT: nbt.Compound{"id": "test"}}},
 		Entities:      []nbt.Compound{{"id": "minecraft:item_frame"}},
 		Diagnostics:   []core.Diagnostic{{Kind: core.UnknownBlock, Count: 2}},
 	}

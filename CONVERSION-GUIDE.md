@@ -12,7 +12,7 @@
 ```
 Bedrock 区块
     │
-    ▼  bedrock.ConvertChunk（阶段 1）
+    ▼  be2je.ConvertChunk（阶段 1）
 ConvertedChunk（已转换，可缓存）
     │
     ▼  converter.FixChunk（阶段 2，可选）
@@ -23,6 +23,21 @@ viewer、Java 存档写出……
 ```
 
 转换逻辑来自 `neomega-converter-core`，修复规则来自 `neomega-viewer-core/fixer/java-postprocess`，本模块负责组合。
+
+反方向是独立链路，不经过 fixer：
+
+```
+Java 区块
+    │
+    ▼  je2be.ConvertChunk / ConvertChunkWithActors
+BedrockChunk
+    │
+    ▼  je2be/export.WriteChunk、ConvertLevel、ConvertWorld
+Bedrock 存档
+```
+
+命令行入口是 `cmd/java-to-bedrock`；两个方向的字段差异和文档入口见
+[je2be/NBT.md](../../neomega-converter-core/je2be/NBT.md)。
 
 阶段 1 只依赖当前区块，结果可以缓存，供多个邻居修复共享。
 阶段 2 需要中心区块和周围 8 个区块的阶段 1 结果。
@@ -64,9 +79,9 @@ if !ok {
 适用：给定一个 `*cellerbedrock.Chunk`，得到完整的 Java 方块调色板 + 方块实体。
 
 ```go
-converted, err := bedrock.ConvertChunk(src)
+converted, err := be2je.ConvertChunk(src)
 // converted.Sections[y].Blocks  → Palette[ir.IRBlock]
-// converted.BlockEntities        → []java.BlockEntity（绝对坐标 + NBT）
+// converted.BlockEntities        → []cellerjava.BlockEntity（绝对坐标 + NBT）
 // converted.Diagnostics          → 未知方块、NBT 错误等
 ```
 
@@ -84,7 +99,7 @@ converted, err := bedrock.ConvertChunk(src)
 
 适用：只想对一个格子应用方块实体规则，不走完整区块流程。
 
-`bedrock.ConvertBlockEntity` 根据 ID 选择规则；需要直接调用某条规则时，也可以使用对应子包：
+`be2je.ConvertBlockEntity` 根据 ID 选择规则；需要直接调用某条规则时，也可以使用对应子包：
 
 ```go
 result, err := bed.Convert(blockentities.Input{
@@ -216,7 +231,7 @@ fixReport = export.FixWorld(javaWorld, fixer, fixOptions)        // 可选，读
 
 ### 3.4 展示框
 
-**现状**：已转换。`neomega-converter-core/bedrock/blockentities/item_frame` 把展示框所在格子转成空气，
+**现状**：已转换。`neomega-converter-core/be2je/blockentities/item_frame` 把展示框所在格子转成空气，
 并在 `ConvertedChunk.Entities` 里产出 Java `minecraft:item_frame` / `minecraft:glow_item_frame` 实体。
 还缺的部分见本节末尾。
 
