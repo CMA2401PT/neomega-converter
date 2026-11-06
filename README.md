@@ -157,7 +157,7 @@ LRU 会在预算不足时淘汰最久没有被访问的条目。
 
 ### 组装与使用
 
-以下代码中 `adapt` 是 `neomega-converter-core/adapt`，`fixedadapt` 是 `neomega-converter/adapt`，`fixer` 是 `neomega-viewer-core/fixer/java-postprocess`。
+以下代码中 `adapt` 是 `neomega-converter-core/be2je/adapt`，`fixedadapt` 是 `neomega-converter/adapt`，`fixer` 是 `neomega-viewer-core/fixer/java-postprocess`。
 
 先提供一个已打开的 `*cellerbedrock.World`，并选定 Bedrock 维度编号 `dimension`。
 下面是省略应用层错误处理的组装伪代码。

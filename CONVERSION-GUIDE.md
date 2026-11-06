@@ -43,7 +43,7 @@ Bedrock 存档
 阶段 1 只依赖当前区块，结果可以缓存，供多个邻居修复共享。
 阶段 2 需要中心区块和周围 8 个区块的阶段 1 结果。
 
-按坐标浏览或导出局部区域时，可用 `neomega-converter-core/adapt.NewConverted` 缓存阶段 1，再按需要组合 `neomega-converter/adapt.NewFixed`。
+按坐标浏览或导出局部区域时，可用 `neomega-converter-core/be2je/adapt.NewConverted` 缓存阶段 1，再按需要组合 `neomega-converter/adapt.NewFixed`。
 两层的组装、缓存与并发约定见 [README 的 adapt 说明](README.md#adapt按坐标读取与缓存)。
 
 **fixer 是可选的**。如果只需要方块内容正确（床颜色、含水、物品），不在意栅栏连接或楼梯拐角，

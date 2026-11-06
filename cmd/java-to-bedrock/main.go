@@ -15,9 +15,9 @@ import (
 
 	cellerbedrock "celler/bedrock"
 	cellerjava "celler/java"
-	"neomega-converter-core"
 	javaactors "neomega-converter-core/je2be/actors"
 	bedrockexport "neomega-converter-core/je2be/export"
+	convertreport "neomega-converter/internal/report"
 )
 
 func main() {
@@ -143,19 +143,7 @@ func printReport(output io.Writer, report bedrockexport.Report, level bedrockexp
 		fmt.Fprintf(output, "convert.dimension.%d.chunks=%d\n", dimension, report.Chunks[int32(dimension)])
 	}
 	fmt.Fprintf(output, "convert.entities=%d\n", report.Entities)
-	fmt.Fprintf(output, "convert.failed_chunks=%d\n", len(report.FailedChunks))
-	for _, failure := range report.FailedChunks {
-		fmt.Fprintf(output, "failed dimension=%d x=%d z=%d: %v\n", failure.Dimension, failure.Pos.X, failure.Pos.Z, failure.Err)
-	}
-	for _, kind := range []converter.DiagnosticKind{
-		converter.UnknownBlock,
-		converter.NBTError,
-		converter.RuleError,
-		converter.UnsupportedBlockEntity,
-		converter.UnknownEntity,
-		converter.UnknownItem,
-	} {
-		fmt.Fprintf(output, "convert.diagnostic.%s=%d\n", kind, report.Diagnostics[kind])
-	}
+	convertreport.Failures(output, report.FailedChunks)
+	convertreport.Diagnostics(output, report.Diagnostics)
 	fmt.Fprintf(output, "level.defaulted_fields=%d\n", len(level.DefaultedFields))
 }

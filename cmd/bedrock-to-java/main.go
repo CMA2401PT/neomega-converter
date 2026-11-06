@@ -15,10 +15,10 @@ import (
 
 	cellerbedrock "celler/bedrock"
 	cellerjava "celler/java"
-	"neomega-converter-core"
 	"neomega-converter-core/be2je/export"
 	"neomega-converter-core/javaout"
 	postprocess "neomega-converter/export"
+	convertreport "neomega-converter/internal/report"
 	"neomega-viewer-core/fixer/java-postprocess"
 )
 
@@ -216,43 +216,11 @@ func printReport(output io.Writer, report export.Report, level export.LevelRepor
 		fmt.Fprintf(output, "convert.dimension.%d.chunks=%d\n", dim, report.Chunks[int32(dim)])
 		fmt.Fprintf(output, "convert.dimension.%d.dropped_sections=%d\n", dim, report.DroppedSections[int32(dim)])
 	}
-	fmt.Fprintf(output, "convert.failed_chunks=%d\n", len(report.FailedChunks))
 	fmt.Fprintf(output, "convert.skipped_chunks=%d\n", report.Skipped)
 	fmt.Fprintf(output, "convert.block_entities=%d\n", report.BlockEntities)
 	fmt.Fprintf(output, "convert.entities=%d\n", report.Entities)
-	for _, kind := range []converter.DiagnosticKind{
-		converter.UnknownBlock,
-		converter.NBTError,
-		converter.RuleError,
-		converter.UnsupportedBlockEntity,
-		converter.UnknownEntity,
-		converter.UnknownItem,
-	} {
-		fmt.Fprintf(output, "convert.diagnostic.%s=%d\n", kind, report.Diagnostics[kind])
-	}
-	for _, failure := range report.FailedChunks {
-		fmt.Fprintf(output, "failed dimension=%d x=%d z=%d: %v\n", failure.Dimension, failure.Pos.X, failure.Pos.Z, failure.Err)
-	}
-	for _, state := range report.UnknownStates {
-		fmt.Fprintf(output, "unknown %s=%d\n", state.State, state.Count)
-	}
-	for _, item := range report.UnknownItems {
-		fmt.Fprintf(output, "unknown_item %s=%d\n", item.Item, item.Count)
-	}
-	ids := make([]string, 0, len(report.UnsupportedBlockEntities))
-	for id := range report.UnsupportedBlockEntities {
-		ids = append(ids, id)
-	}
-	sort.Slice(ids, func(i, j int) bool {
-		a, b := report.UnsupportedBlockEntities[ids[i]], report.UnsupportedBlockEntities[ids[j]]
-		if a != b {
-			return a > b
-		}
-		return ids[i] < ids[j]
-	})
-	for _, id := range ids[:min(10, len(ids))] {
-		fmt.Fprintf(output, "unsupported_block_entity %s=%d\n", id, report.UnsupportedBlockEntities[id])
-	}
+	convertreport.Failures(output, report.FailedChunks)
+	convertreport.Diagnostics(output, report.Diagnostics)
 	fmt.Fprintf(output, "level.defaulted_fields=%d\n", len(level.DefaultedFields))
 	for _, field := range level.DefaultedFields {
 		fmt.Fprintf(output, "level.defaulted.%s=1\n", field)

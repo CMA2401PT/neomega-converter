@@ -18,7 +18,7 @@ import (
 	converts "neomega-blocks/presets/block-converts/v1"
 	repair "neomega-converter"
 	"neomega-converter-core"
-	coreadapt "neomega-converter-core/adapt"
+	coreadapt "neomega-converter-core/be2je/adapt"
 	"neomega-converter/fixpalette"
 	"neomega-viewer-core/fixer/java-postprocess"
 )

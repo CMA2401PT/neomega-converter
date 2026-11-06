@@ -14,6 +14,7 @@
 | `export` | 遍历已有 Java 世界并写回邻接属性 |
 | `cmd/bedrock-to-java` | 参数校验、转换与修复流程、最终提交和报告 |
 | `cmd/structure-to-world` | 结构文件路径、取消和结果展示；解析与落盘复用 converter-core |
+| `internal/report` | 两个方向命令共用的失败柱子与诊断汇总输出格式 |
 
 方块状态或方块实体转换规则应放在 converter-core；邻接规则应放在 viewer-core/fixer。本模块不复制这些规则，两个 core 也不能反向依赖本模块或彼此依赖。
 

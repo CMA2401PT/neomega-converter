@@ -12,7 +12,7 @@ import (
 	"celler"
 	cellerbedrock "celler/bedrock"
 	"neomega-converter-core"
-	coreadapt "neomega-converter-core/adapt"
+	coreadapt "neomega-converter-core/be2je/adapt"
 	"neomega-viewer-core/fixer/java-postprocess"
 )
 
