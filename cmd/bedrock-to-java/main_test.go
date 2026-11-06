@@ -242,3 +242,17 @@ func TestHelpFixOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkLimitsValidatedBeforeCreatingOutput(t *testing.T) {
+	for _, flags := range [][]string{{"-memory-mib", "63"}, {"-workers", "-1"}} {
+		output := filepath.Join(t.TempDir(), "not-created")
+		args := append([]string{"-input", "missing", "-output", output}, flags...)
+		var buffer bytes.Buffer
+		if err := run(args, &buffer); err == nil || !strings.Contains(err.Error(), "预算") {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(output); !os.IsNotExist(err) {
+			t.Fatal("无效参数创建了输出", err)
+		}
+	}
+}

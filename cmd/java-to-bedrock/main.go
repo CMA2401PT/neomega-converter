@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
+	"os/signal"
 	"sort"
 	"strconv"
 	"strings"
@@ -37,12 +39,20 @@ func run(args []string, output io.Writer) error {
 	targetPath := flags.String("output", "", "Bedrock 世界目录：必须不存在或为空")
 	dimensionText := flags.String("dims", "0", "维度编号，逗号分隔：0,1,2")
 	strict := flags.Bool("strict", false, "遇到第一根失败的柱子立即返回")
+	memory := flags.Int("memory-mib", 512, "转换工作内存预算（MiB，至少 64；不是进程内存硬上限）")
+	workers := flags.Int("workers", 0, "转换并发任务数上限，0 按 CPU 和内存预算自动选择")
 	entityDefs := flags.String("entity-defs", "", "可选：mcconv 格式的 bedrock_entities.json")
 	if err := flags.Parse(args); errors.Is(err, flag.ErrHelp) {
 		return nil
 	} else if err != nil {
 		return err
 	}
+	if *memory < 64 || *workers < 0 {
+		return fmt.Errorf("转换内存预算至少 64 MiB，workers 不能为负数")
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
 	if *input == "" || *targetPath == "" {
 		flags.Usage()
 		return fmt.Errorf("必须指定 -input 和 -output")
@@ -78,6 +88,10 @@ func run(args []string, output io.Writer) error {
 		return err
 	}
 	report, err := bedrockexport.ConvertWorld(source, target, bedrockexport.ConvertOptions{
+		Context:    ctx,
+		MemoryMiB:  *memory,
+		Workers:    *workers,
+		NewWorld:   true,
 		Dimensions: dimensions,
 		Strict:     *strict,
 	})

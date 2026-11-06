@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
+	"os/signal"
 	"sort"
 	"strconv"
 	"strings"
@@ -44,12 +46,20 @@ func run(args []string, output io.Writer) (err error) {
 	fix := flags.Bool("fix", false, "写出后独立读取 Java 世界并修复邻接状态")
 	fixOnly := flags.Bool("fix-only", false, "只修复已有 Java 世界的邻接状态")
 	strict := flags.Bool("strict", false, "遇到第一根转换失败的柱子立即返回")
+	memory := flags.Int("memory-mib", 512, "转换工作内存预算（MiB，至少 64；不是进程内存硬上限）")
+	workers := flags.Int("workers", 0, "转换并发任务数上限，0 按 CPU 和内存预算自动选择")
 	allChunks := flags.Bool("all-chunks", false, "也转换未生成完成的柱子；默认跳过")
 	if err = flags.Parse(args); errors.Is(err, flag.ErrHelp) {
 		return nil
 	} else if err != nil {
 		return err
 	}
+	if *memory < 64 || *workers < 0 {
+		return fmt.Errorf("转换内存预算至少 64 MiB，workers 不能为负数")
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
 	if *fixOnly {
 		// 按参数是否出现判断互斥，显式传入 -fix=false 或空 -input 也不能混用模式。
 		flags.Visit(func(flag *flag.Flag) {
@@ -73,7 +83,7 @@ func run(args []string, output io.Writer) (err error) {
 		return err
 	}
 	if *fixOnly {
-		return runFixOnly(*targetPath, dimensions, output)
+		return runFixOnly(ctx, *targetPath, dimensions, output)
 	}
 	if err = prepareOutput(*targetPath); err != nil {
 		return err
@@ -103,21 +113,28 @@ func run(args []string, output io.Writer) (err error) {
 	report, err := export.ConvertWorld(
 		source,
 		target,
-		export.ConvertOptions{Dimensions: dimensions, Strict: *strict, IncludeUnfinished: *allChunks},
+		export.ConvertOptions{
+			Dimensions:        dimensions,
+			Strict:            *strict,
+			IncludeUnfinished: *allChunks,
+			Context:           ctx,
+			MemoryMiB:         *memory,
+			Workers:           *workers,
+		},
 	)
 	printReport(output, report, levelReport)
 	if err != nil {
 		return err
 	}
 	if *fix {
-		if err = fixWorld(target, dimensions, output); err != nil {
+		if err = fixWorld(ctx, target, dimensions, output); err != nil {
 			return err
 		}
 	}
 	return target.Commit()
 }
 
-func runFixOnly(directory string, dimensions []int32, output io.Writer) (err error) {
+func runFixOnly(ctx context.Context, directory string, dimensions []int32, output io.Writer) (err error) {
 	// 写模式打开会自动创建目录，先确认目标存在，避免路径输错后生成一个空世界。
 	if _, err = os.Stat(directory); err != nil {
 		return err
@@ -127,13 +144,13 @@ func runFixOnly(directory string, dimensions []int32, output io.Writer) (err err
 		return err
 	}
 	defer func() { err = errors.Join(err, target.Close()) }()
-	if err = fixWorld(target, dimensions, output); err != nil {
+	if err = fixWorld(ctx, target, dimensions, output); err != nil {
 		return err
 	}
 	return target.Commit()
 }
 
-func fixWorld(target *cellerjava.World, dimensions []int32, output io.Writer) error {
+func fixWorld(ctx context.Context, target *cellerjava.World, dimensions []int32, output io.Writer) error {
 	// 两种修复入口共用编号映射与报告，修复始终只依赖 Java 世界中的数据。
 	f, err := fixer.New()
 	if err != nil {
@@ -147,7 +164,7 @@ func fixWorld(target *cellerjava.World, dimensions []int32, output io.Writer) er
 	fixed, err := postprocess.FixWorld(
 		target,
 		f,
-		postprocess.FixOptions{Dimensions: javaDims},
+		postprocess.FixOptions{Dimensions: javaDims, Context: ctx},
 	)
 	fmt.Fprintf(output, "fix.chunks=%d\nfix.changed_sections=%d\n", fixed.Chunks, fixed.ChangedSections)
 	return err

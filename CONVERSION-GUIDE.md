@@ -273,10 +273,13 @@ Java 的展示框不是方块，是实体，存放在 `entities/` 目录的 regi
 **现状**：已实现，见 converter-core README 的导出说明及本模块 README 的命令行说明。
 `coreexport` 是 `neomega-converter-core/export`，`export` 是本模块的 `neomega-converter/export`。
 转换和邻接修复是两个独立步骤，修复步骤读写的是已经写好的 Java 存档。
+两种存档转换都采用有界的并行任务：源句柄串行读取，任务独立转换和编码，目标按源顺序提交。
+`-memory-mib` 与 `-workers` 控制转换预算和任务上限，具体约定见 README。
+Bedrock 输出按字节限制数据库批次，地形与实体一起提交。
+修复仍为单独的串行 pass，只在内存中保留相邻三行原始方块，不增加快照文件。
 
 **还缺的部分**：
 
-- 并行。两个步骤都是单线程。
 - 未完成柱子默认跳过，`-all-chunks` 才会转换。
 - 写出格式没有在游戏里加载验证，待确认的字段见 README。
 

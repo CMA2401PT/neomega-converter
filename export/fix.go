@@ -2,6 +2,7 @@ package export
 
 import (
 	"cmp"
+	"context"
 	"errors"
 	"slices"
 
@@ -16,6 +17,8 @@ import (
 )
 
 type FixOptions struct {
+	// Context 为 nil 时使用 Background；取消只停止后续区块，已写出的修改仍保留。
+	Context context.Context
 	// 空列表选择主世界；独立修复入口也允许 Java 自定义维度目录。
 	Dimensions []cellerjava.Dimension
 }
@@ -34,6 +37,10 @@ type fixRow struct {
 
 func FixWorld(world *cellerjava.World, f *fixer.Fixer, options FixOptions) (report FixReport, err error) {
 	// 窗口保留写回前的原值，使逐柱写回不会改变后续修复的邻居。
+	ctx := options.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	defer func() { err = errors.Join(err, world.Flush()) }()
 	dimensions := options.Dimensions
 	if len(dimensions) == 0 {
@@ -47,6 +54,9 @@ func FixWorld(world *cellerjava.World, f *fixer.Fixer, options FixOptions) (repo
 		seen[dim] = true
 		var positions []celler.ChunkPos
 		err = world.Scan(dim, cellerjava.Terrain, func(pos celler.ChunkPos) error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			positions = append(positions, pos)
 			return nil
 		})
@@ -82,6 +92,9 @@ func FixWorld(world *cellerjava.World, f *fixer.Fixer, options FixOptions) (repo
 				chunks := make(map[celler.ChunkPos]*converter.ConvertedChunk, len(incoming.positions))
 				window[incoming.z] = chunks
 				for _, pos := range incoming.positions {
+					if err := ctx.Err(); err != nil {
+						return report, err
+					}
 					blocks, err := readFixBlocks(world, dim, pos)
 					if err != nil {
 						return report, err
@@ -92,6 +105,9 @@ func FixWorld(world *cellerjava.World, f *fixer.Fixer, options FixOptions) (repo
 				nextRow++
 			}
 			for _, pos := range row.positions {
+				if err := ctx.Err(); err != nil {
+					return report, err
+				}
 				center := window[row.z][pos]
 				var neighbours [8]*converter.ConvertedChunk
 				for side, offset := range [8][2]int32{
@@ -112,7 +128,7 @@ func FixWorld(world *cellerjava.World, f *fixer.Fixer, options FixOptions) (repo
 			delete(window, row.z-1)
 		}
 	}
-	return report, nil
+	return report, ctx.Err()
 }
 
 func readFixBlocks(

@@ -1,6 +1,8 @@
 package export
 
 import (
+	"context"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -364,4 +366,27 @@ func converted(pos celler.ChunkPos, ys ...int32) *converter.ConvertedChunk {
 		result.Sections[y] = &converter.ConvertedSection{Blocks: layer_storage.MakePaletteStorage(ir.IRBlock("minecraft:air []"))}
 	}
 	return result
+}
+
+func TestFixWorldCancelledBeforeWriting(t *testing.T) {
+	world := openJava(t)
+	writeConverted(t, world, converted(celler.ChunkPos{}, 0))
+	before, err := world.ReadRaw(cellerjava.Overworld, cellerjava.Terrain, celler.ChunkPos{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := fixer.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	report, err := FixWorld(world, f, FixOptions{Context: ctx})
+	if !errors.Is(err, context.Canceled) || report.ChangedSections != 0 {
+		t.Fatal(report, err)
+	}
+	after, err := world.ReadRaw(cellerjava.Overworld, cellerjava.Terrain, celler.ChunkPos{})
+	if err != nil || !reflect.DeepEqual(before, after) {
+		t.Fatal("取消后仍改写了区块", err)
+	}
 }
