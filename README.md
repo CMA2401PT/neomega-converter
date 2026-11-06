@@ -53,6 +53,8 @@ go run ./cmd/structure-to-world -input /path/to/城堡.schem
 go run ./cmd/structure-to-world -input /path/to/城堡.mcstructure -output /path/to/基岩城堡
 ```
 
+`-memory-mib` 设置工作预算，默认 512，至少 64；例如 `-memory-mib 1024` 允许约 1 GiB 的映射与并行工作预算。它不是进程内存硬上限。`-workers` 设置 Java 写出任务数上限，默认 0 按 CPU 自动选择（最多 8 个），实际并发仍受预算约束。
+
 默认输出与输入同路径、同名的文件夹，去掉扩展名。取消或失败不留下半成品世界，也不覆盖已有存档。格式、内存策略和兼容性范围见 [核心说明](../../neomega-converter-core/README.md#结构文件写成原生存档)。
 
 ## 在 Go 程序中组合

@@ -13,6 +13,8 @@ import (
 func main() {
 	input := flag.String("input", "", "结构文件路径")
 	output := flag.String("output", "", "输出目录；默认在结构文件旁建立同名文件夹")
+	memory := flag.Int("memory-mib", 512, "转换工作内存预算（MiB，至少 64；不是进程内存硬上限）")
+	workers := flag.Int("workers", 0, "Java 写出并发数上限，0 自动选择")
 	flag.Parse()
 	if *input == "" {
 		fmt.Fprintln(os.Stderr, "需要 -input 指定结构文件")
@@ -20,7 +22,10 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	result, err := structure.ConvertFile(ctx, *input, *output)
+	result, err := structure.ConvertFile(ctx, *input, *output, structure.Options{
+		MemoryMiB: *memory,
+		Workers:   *workers,
+	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
