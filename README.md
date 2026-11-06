@@ -43,6 +43,18 @@ go build -o java-to-bedrock ./cmd/java-to-bedrock
 `-entity-defs` 可加载 mcconv 格式的 `bedrock_entities.json`，给实体补 spawn/born 组和
 health 的 Base/Max；没有这张表时实体使用 Bedrock 默认行为。
 
+## 结构文件转存档
+
+`cmd/structure-to-world` 复用 converter-core 的流式转换。schem、schematic、litematic 和原版 nbt 写成 Java；mcstructure 和 mcworld 写成 Bedrock。从本模块目录执行：
+
+```sh
+go run ./cmd/structure-to-world -input /path/to/城堡.schem
+# 指定其他输出位置时，目标必须不存在或为空。
+go run ./cmd/structure-to-world -input /path/to/城堡.mcstructure -output /path/to/基岩城堡
+```
+
+默认输出与输入同路径、同名的文件夹，去掉扩展名。取消或失败不留下半成品世界，也不覆盖已有存档。格式、内存策略和兼容性范围见 [核心说明](../../neomega-converter-core/README.md#结构文件写成原生存档)。
+
 ## 在 Go 程序中组合
 
 模块导入路径是 `neomega-converter`，不包含目录前缀 `apps/`。一根柱子覆盖水平 16×16 的区域，内部按高度分成 16×16×16 的 section。
