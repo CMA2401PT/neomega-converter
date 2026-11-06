@@ -13,16 +13,17 @@
 Bedrock 区块
     │
     ▼  be2je.ConvertChunk（阶段 1）
-ConvertedChunk（已转换，可缓存）
+JavaChunk（已转换，可缓存）
     │
     ▼  converter.FixChunk（阶段 2，可选）
-ConvertedChunk（已修复）
+JavaChunk（已修复）
     │
     ▼  消费方自行适配
 viewer、Java 存档写出……
 ```
 
 转换逻辑来自 `neomega-converter-core`，修复规则来自 `neomega-viewer-core/fixer/java-postprocess`，本模块负责组合。
+写成存档时由 `javaout` 编码 Java 柱子，各格式之间的完整关系见 [converter-core 的整体结构](../../neomega-converter-core/README.md#整体结构)。
 
 反方向是独立链路，不经过 fixer：
 
@@ -32,7 +33,7 @@ Java 区块
     ▼  je2be.ConvertChunk / ConvertChunkWithActors
 BedrockChunk
     │
-    ▼  je2be/export.WriteChunk、ConvertLevel、ConvertWorld
+    ▼  bedrockout.EncodeChunk；整图用 je2be/export.ConvertWorld、ConvertLevel
 Bedrock 存档
 ```
 
@@ -141,7 +142,7 @@ javaItem := items.ConvertItem(bedrockItemCompound)
 **整根区块版**（整图导出、按需模式）：
 ```go
 f, err := fixer.New()
-fixed := converter.FixChunk(f, center, [8]*core.ConvertedChunk{
+fixed := converter.FixChunk(f, center, [8]*core.JavaChunk{
     fixpalette.NW: nwChunk, fixpalette.N: nChunk, /* … */
 })
 ```
@@ -190,9 +191,9 @@ fixed = converter.FixChunk(fixer, converted, 空八邻居数组)
 section = fixed.Sections[0]
 ```
 
-**整图导出**：用 `export` 包，两步互不依赖：
+**整图导出**：两步互不依赖：
 ```
-report = coreexport.ConvertWorld(bedrockWorld, javaWorld, options)   // 不跑 fixer，写 PostProcessing
+report = coreexport.ConvertWorld(bedrockWorld, javaWorld, options)   // 不跑 fixer，PostProcessing 由 javaout 登记
 fixReport = export.FixWorld(javaWorld, fixer, fixOptions)        // 可选，读回 Java 存档修复后写回
 ```
 
@@ -232,7 +233,7 @@ fixReport = export.FixWorld(javaWorld, fixer, fixOptions)        // 可选，读
 ### 3.4 展示框
 
 **现状**：已转换。`neomega-converter-core/be2je/blockentities/item_frame` 把展示框所在格子转成空气，
-并在 `ConvertedChunk.Entities` 里产出 Java `minecraft:item_frame` / `minecraft:glow_item_frame` 实体。
+并在 `JavaChunk.Entities` 里产出 Java `minecraft:item_frame` / `minecraft:glow_item_frame` 实体。
 还缺的部分见本节末尾。
 
 两版的表示不同，这是这条规则长成这样的原因：
@@ -271,7 +272,7 @@ Java 的展示框不是方块，是实体，存放在 `entities/` 目录的 regi
 ### 3.6 整图导出
 
 **现状**：已实现，见 converter-core README 的导出说明及本模块 README 的命令行说明。
-`coreexport` 是 `neomega-converter-core/export`，`export` 是本模块的 `neomega-converter/export`。
+`coreexport` 是 `neomega-converter-core/be2je/export`，`export` 是本模块的 `neomega-converter/export`。
 转换和邻接修复是两个独立步骤，修复步骤读写的是已经写好的 Java 存档。
 两种存档转换都采用有界的并行任务：源句柄串行读取，任务独立转换和编码，目标按源顺序提交。
 `-memory-mib` 与 `-workers` 控制转换预算和任务上限，具体约定见 README。

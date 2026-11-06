@@ -157,5 +157,5 @@ func printReport(output io.Writer, report bedrockexport.Report, level bedrockexp
 	} {
 		fmt.Fprintf(output, "convert.diagnostic.%s=%d\n", kind, report.Diagnostics[kind])
 	}
-	fmt.Fprintf(output, "level.defaulted_fields=%d\n", len(level.Defaulted))
+	fmt.Fprintf(output, "level.defaulted_fields=%d\n", len(level.DefaultedFields))
 }

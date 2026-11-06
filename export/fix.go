@@ -78,7 +78,7 @@ func FixWorld(world *cellerjava.World, f *fixer.Fixer, options FixOptions) (repo
 			rows = append(rows, fixRow{z: positions[start].Z, positions: positions[start:end]})
 			start = end
 		}
-		window := make(map[int32]map[celler.ChunkPos]*converter.ConvertedChunk)
+		window := make(map[int32]map[celler.ChunkPos]*converter.JavaChunk)
 		nextRow := 0
 		for _, row := range rows {
 			// 稀疏存档可能跳过若干 z；先淘汰过期行，加载游标只向前，绝不重读已写回行。
@@ -89,7 +89,7 @@ func FixWorld(world *cellerjava.World, f *fixer.Fixer, options FixOptions) (repo
 			}
 			for nextRow < len(rows) && rows[nextRow].z <= row.z+1 {
 				incoming := rows[nextRow]
-				chunks := make(map[celler.ChunkPos]*converter.ConvertedChunk, len(incoming.positions))
+				chunks := make(map[celler.ChunkPos]*converter.JavaChunk, len(incoming.positions))
 				window[incoming.z] = chunks
 				for _, pos := range incoming.positions {
 					if err := ctx.Err(); err != nil {
@@ -109,7 +109,7 @@ func FixWorld(world *cellerjava.World, f *fixer.Fixer, options FixOptions) (repo
 					return report, err
 				}
 				center := window[row.z][pos]
-				var neighbours [8]*converter.ConvertedChunk
+				var neighbours [8]*converter.JavaChunk
 				for side, offset := range [8][2]int32{
 					{-1, -1}, {0, -1}, {1, -1}, {-1, 0},
 					{1, 0}, {-1, 1}, {0, 1}, {1, 1},
@@ -135,7 +135,7 @@ func readFixBlocks(
 	world *cellerjava.World,
 	dim cellerjava.Dimension,
 	pos celler.ChunkPos,
-) (*converter.ConvertedChunk, error) {
+) (*converter.JavaChunk, error) {
 	// 窗口只持有方块调色板，完整 NBT 留到实际写回时重新读取。
 	chunk, err := world.ReadChunk(dim, pos)
 	if err != nil {
@@ -145,14 +145,14 @@ func readFixBlocks(
 	if err != nil {
 		return nil, err
 	}
-	blocks := &converter.ConvertedChunk{Pos: pos, Sections: make(map[int32]*converter.ConvertedSection)}
+	blocks := &converter.JavaChunk{Pos: pos, Sections: make(map[int32]*converter.JavaSection)}
 	for _, y := range ys {
 		section, err := chunk.Section(y)
 		if err != nil {
 			return nil, err
 		}
 		if section.Blocks != nil {
-			blocks.Sections[y] = &converter.ConvertedSection{Blocks: section.Blocks}
+			blocks.Sections[y] = &converter.JavaSection{Blocks: section.Blocks}
 		}
 	}
 	return blocks, nil
@@ -161,8 +161,8 @@ func readFixBlocks(
 func writeFixedBlocks(
 	world *cellerjava.World,
 	dim cellerjava.Dimension,
-	center *converter.ConvertedChunk,
-	fixed *converter.ConvertedChunk,
+	center *converter.JavaChunk,
+	fixed *converter.JavaChunk,
 ) (uint64, error) {
 	// 惰性重读保留未修改的 NBT，写回对象不进入原值窗口。
 	var chunk *cellerjava.Chunk

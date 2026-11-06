@@ -26,18 +26,18 @@ func TestFixChunkPreservesMetadataAndOwnership(t *testing.T) {
 	blocks.Set(at, original)
 	east := layer_storage.MakePaletteStorage(ir.IRBlock("minecraft:air []"))
 	east.Set(layer_storage.At(0, 2, 8), "minecraft:stone []")
-	untouched := &core.ConvertedSection{Blocks: layer_storage.MakePaletteStorage(ir.IRBlock("minecraft:stone []"))}
+	untouched := &core.JavaSection{Blocks: layer_storage.MakePaletteStorage(ir.IRBlock("minecraft:stone []"))}
 	biomes := &[64]string{"minecraft:plains"}
-	center := &core.ConvertedChunk{
+	center := &core.JavaChunk{
 		Pos:           celler.ChunkPos{X: -7, Z: 4},
 		Dimension:     2,
-		Sections:      map[int32]*core.ConvertedSection{0: {Blocks: blocks, Biomes: biomes}, 1: untouched},
+		Sections:      map[int32]*core.JavaSection{0: {Blocks: blocks, Biomes: biomes}, 1: untouched},
 		BlockEntities: []cellerjava.BlockEntity{{NBT: nbt.Compound{"id": "test"}}},
 		Entities:      []nbt.Compound{{"id": "minecraft:item_frame"}},
 		Diagnostics:   []core.Diagnostic{{Kind: core.UnknownBlock, Count: 2}},
 	}
-	neighbour := &core.ConvertedChunk{Sections: map[int32]*core.ConvertedSection{0: {Blocks: east}}}
-	fixed := FixChunk(f, center, [8]*core.ConvertedChunk{fixpalette.E: neighbour})
+	neighbour := &core.JavaChunk{Sections: map[int32]*core.JavaSection{0: {Blocks: east}}}
+	fixed := FixChunk(f, center, [8]*core.JavaChunk{fixpalette.E: neighbour})
 	if fixed.Sections[0].Blocks.Get(at).States().GetDefault("east", "false") != "true" {
 		t.Fatal("未使用邻居修复栅栏连接")
 	}

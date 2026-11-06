@@ -16,7 +16,8 @@ import (
 	cellerbedrock "celler/bedrock"
 	cellerjava "celler/java"
 	"neomega-converter-core"
-	"neomega-converter-core/export"
+	"neomega-converter-core/be2je/export"
+	"neomega-converter-core/javaout"
 	postprocess "neomega-converter/export"
 	"neomega-viewer-core/fixer/java-postprocess"
 )
@@ -104,10 +105,7 @@ func run(args []string, output io.Writer) (err error) {
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	document, levelReport, err := export.ConvertLevel(level, export.DataVersion)
-	if err != nil {
-		return err
-	}
+	document, levelReport := export.ConvertLevel(level)
 	if err = target.WriteLevel(document); err != nil {
 		return err
 	}
@@ -159,7 +157,7 @@ func fixWorld(ctx context.Context, target *cellerjava.World, dimensions []int32,
 	}
 	javaDims := make([]cellerjava.Dimension, 0, len(dimensions))
 	for _, dim := range dimensions {
-		mapped, _ := export.JavaDimension(dim)
+		mapped, _ := javaout.Dimension(dim)
 		javaDims = append(javaDims, mapped)
 	}
 	fixed, err := postprocess.FixWorld(
@@ -181,7 +179,7 @@ func parseDimensions(text string) ([]int32, error) {
 			return nil, err
 		}
 		dim := int32(value)
-		if _, ok := export.JavaDimension(dim); !ok {
+		if _, ok := javaout.Dimension(dim); !ok {
 			return nil, fmt.Errorf("不支持的维度 %d", dim)
 		}
 		if !seen[dim] {

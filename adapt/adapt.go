@@ -21,12 +21,12 @@ func NewFixed(src *coreadapt.Converted, f *fixer.Fixer, options coreadapt.Option
 	load := func(
 		ctx context.Context,
 		pos celler.ChunkPos,
-	) (*converter.ConvertedChunk, error) {
+	) (*converter.JavaChunk, error) {
 		center, err := src.Chunk(ctx, pos)
 		if err != nil || center == nil {
 			return nil, err
 		}
-		var neighbours [8]*converter.ConvertedChunk
+		var neighbours [8]*converter.JavaChunk
 		for side, offset := range [8]celler.ChunkPos{
 			fixpalette.NW: {X: -1, Z: -1},
 			fixpalette.N:  {Z: -1},
@@ -53,7 +53,7 @@ func NewFixed(src *coreadapt.Converted, f *fixer.Fixer, options coreadapt.Option
 	return &Fixed{cache: coreadapt.NewCachedSource(options, load)}
 }
 
-func (f *Fixed) Chunk(ctx context.Context, pos celler.ChunkPos) (*converter.ConvertedChunk, error) {
+func (f *Fixed) Chunk(ctx context.Context, pos celler.ChunkPos) (*converter.JavaChunk, error) {
 	// 整柱修复只执行一次，多个高度窗口与邻柱请求可以复用同一结果。
 	return f.cache.Chunk(ctx, pos)
 }

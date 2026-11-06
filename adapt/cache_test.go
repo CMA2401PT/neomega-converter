@@ -17,7 +17,7 @@ import (
 )
 
 type chunkReply struct {
-	chunk *converter.ConvertedChunk
+	chunk *converter.JavaChunk
 	err   error
 }
 
@@ -200,7 +200,7 @@ func TestFiveFixedColumnsReadTwentyOneConvertedColumns(t *testing.T) {
 		return read(ctx, pos)
 	}, coreadapt.Options{})
 	fixed := NewFixed(converted, newFixer(t), coreadapt.Options{})
-	results := make(map[celler.ChunkPos]*converter.ConvertedChunk)
+	results := make(map[celler.ChunkPos]*converter.JavaChunk)
 	for range 2 {
 		for _, pos := range []celler.ChunkPos{{}, {X: -1}, {X: 1}, {Z: -1}, {Z: 1}} {
 			got := getChunk(t, fixed, pos)

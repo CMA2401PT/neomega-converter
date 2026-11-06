@@ -14,7 +14,7 @@ import (
 	"celler/layer_storage"
 	"neomega-blocks/ir"
 	converts "neomega-blocks/presets/block-converts/v1"
-	"neomega-converter-core/export"
+	"neomega-converter-core/javaout"
 	nbt "neomega-nbt/presets/v1"
 )
 
@@ -68,7 +68,7 @@ func TestRun(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if level.Value["Data"].(nbt.Compound)["DataVersion"] != export.DataVersion {
+		if level.Value["Data"].(nbt.Compound)["DataVersion"] != javaout.DataVersion {
 			t.Fatal(level)
 		}
 		if _, err = world.ReadChunk(cellerjava.Overworld, celler.ChunkPos{}); err != nil {
@@ -136,7 +136,7 @@ func TestRunFixOnly(t *testing.T) {
 				blocks := layer_storage.MakePaletteStorage(ir.IRBlock("minecraft:air []"))
 				blocks.Set(layer_storage.At(5, 5, 5), fence)
 				blocks.Set(layer_storage.At(6, 5, 5), fence)
-				chunk := cellerjava.NewChunk(celler.ChunkPos{}, export.DataVersion)
+				chunk := cellerjava.NewChunk(celler.ChunkPos{}, javaout.DataVersion)
 				if err = chunk.SetSection(&cellerjava.Section{Y: 0, Blocks: blocks}); err != nil {
 					t.Fatal(err)
 				}

@@ -57,7 +57,7 @@ func newFixer(t *testing.T) *fixer.Fixer {
 	return f
 }
 
-func getChunk(t *testing.T, src coreadapt.ChunkSource, pos celler.ChunkPos) *converter.ConvertedChunk {
+func getChunk(t *testing.T, src coreadapt.ChunkSource, pos celler.ChunkPos) *converter.JavaChunk {
 	t.Helper()
 	chunk, err := src.Chunk(context.Background(), pos)
 	if err != nil || chunk == nil {
@@ -66,7 +66,7 @@ func getChunk(t *testing.T, src coreadapt.ChunkSource, pos celler.ChunkPos) *con
 	return chunk
 }
 
-func blockAt(chunk *converter.ConvertedChunk, x, z int) ir.IRBlock {
+func blockAt(chunk *converter.JavaChunk, x, z int) ir.IRBlock {
 	return chunk.Sections[0].Blocks.Get(layer_storage.At(x, 4, z))
 }
 
@@ -148,7 +148,7 @@ func TestFixedUsesUnfixedNeighbours(t *testing.T) {
 	fixedEast := getChunk(t, fixed, east)
 	assertState(t, blockAt(rawEast, 0, 8), "shape", "straight")
 	assertState(t, blockAt(fixedEast, 0, 8), "shape", "inner_left")
-	wrong := repair.FixChunk(f, rawWest, [8]*converter.ConvertedChunk{fixpalette.E: fixedEast})
+	wrong := repair.FixChunk(f, rawWest, [8]*converter.JavaChunk{fixpalette.E: fixedEast})
 	assertState(t, blockAt(wrong, 15, 8), "east", "true")
 	got := getChunk(t, fixed, west)
 	assertState(t, blockAt(got, 15, 8), "east", "false")
@@ -172,7 +172,7 @@ func TestConcurrentRequestsShareBothStages(t *testing.T) {
 		}, coreadapt.Options{})
 		fixed := NewFixed(converted, f, coreadapt.Options{})
 		const callers = 12
-		var raw, repaired [callers]*converter.ConvertedChunk
+		var raw, repaired [callers]*converter.JavaChunk
 		var wg sync.WaitGroup
 		pos := celler.ChunkPos{X: -1, Z: 2}
 		for i := range callers {

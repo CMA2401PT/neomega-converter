@@ -11,7 +11,7 @@ import (
 	"celler/java/region"
 	"celler/layer_storage"
 	"neomega-blocks/ir"
-	coreexport "neomega-converter-core/export"
+	coreexport "neomega-converter-core/be2je/export"
 	nbt "neomega-nbt/presets/v1"
 )
 

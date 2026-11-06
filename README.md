@@ -66,7 +66,7 @@ go run ./cmd/structure-to-world -input /path/to/城堡.mcstructure -output /path
 模块导入路径是 `neomega-converter`，不包含目录前缀 `apps/`。一根柱子覆盖水平 16×16 的区域，内部按高度分成 16×16×16 的 section。
 
 
-整图导出先调用 `neomega-converter-core/export.ConvertWorld` 写出 Java 世界，再按需调用本模块的 `export.FixWorld`。
+整图导出先调用 `neomega-converter-core/be2je/export.ConvertWorld` 写出 Java 世界，再按需调用本模块的 `export.FixWorld`。
 转换返回时已刷新写入，修复读取的是 Java 数据，因此也能独立处理其他来源的 Java 世界。
 命令行负责最后提交或关闭目标世界。
 
@@ -84,7 +84,7 @@ go run ./cmd/structure-to-world -input /path/to/城堡.mcstructure -output /path
 
 浏览器和区域导出通常只需要世界中的一部分柱子。
 转换 core 的 `adapt` 提供 `Converted` 与 `ChunkSource`，本模块的 `adapt` 提供 `Fixed`。
-消费方调用 `Chunk(ctx, pos)`，取得共享只读的 `ConvertedChunk`。
+消费方调用 `Chunk(ctx, pos)`，取得共享只读的 `JavaChunk`。
 不存在的柱子返回 `nil, nil`。
 
 只需要转换结果时，使用 `Converted`。
@@ -197,7 +197,7 @@ chunk, err := source.Chunk(ctx, celler.ChunkPos{X: 10, Z: -3})
 ```
 
 viewer 可以把取得的柱子适配成渲染 section。
-区域导出可以遍历所需坐标，把柱子传给 `export.ToJavaChunk` 和 `export.ToJavaEntities`。
+区域导出可以遍历所需坐标，把柱子传给 converter-core 的 `javaout.Encode`，再用返回记录的 `Write` 写入 Java 世界。
 两种用途共用上述来源，邻居仍从原始 Bedrock 来源读取。
 转换和修复的语义及诊断含义见[转换核心说明](../../neomega-converter-core/README.md)与[修复规则](../../neomega-viewer-core/fixer/java-postprocess/FIXER.md)。
 

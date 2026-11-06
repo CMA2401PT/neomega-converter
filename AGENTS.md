@@ -39,7 +39,7 @@
 
 LevelDB 打开可能写辅助文件，因此文档、测试及手工验证都使用 Bedrock 存档副本。转换输出只接受新建或空目录；`-fix-only` 修改已有 Java 世界，并与 `-input`、`-fix` 互斥。保留参数按是否出现的互斥判断，即使显式传入 `-fix=false` 也属于混用。
 
-报告保持稳定排序，每个计数一行，以便比较转换与修复的输出。维度编号映射由 converter-core 的 `export.JavaDimension` 提供，不在命令中另建映射。
+报告保持稳定排序，每个计数一行，以便比较转换与修复的输出。维度编号映射由 converter-core 的 `javaout.Dimension` 提供，不在命令中另建映射。
 
 ## 验收
 
