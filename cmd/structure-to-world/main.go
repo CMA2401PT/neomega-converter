@@ -30,9 +30,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if result.Edition == "java" {
+	// 只有 Java 存档统计区块数；Bedrock 存档按目录写出，没有可计数的柱子。
+	if result.Edition == structure.Java {
 		fmt.Printf("%s · %s · %d chunks\n", result.Edition, result.Directory, result.Chunks)
-	} else {
-		fmt.Printf("%s · %s\n", result.Edition, result.Directory)
+		return
 	}
+	fmt.Printf("%s · %s\n", result.Edition, result.Directory)
 }
