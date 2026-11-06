@@ -54,9 +54,6 @@ func run(args []string, output io.Writer) (err error) {
 	} else if err != nil {
 		return err
 	}
-	if *memory < 64 || *workers < 0 {
-		return fmt.Errorf("转换内存预算至少 64 MiB，workers 不能为负数")
-	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
@@ -84,6 +81,10 @@ func run(args []string, output io.Writer) (err error) {
 	}
 	if *fixOnly {
 		return runFixOnly(ctx, *targetPath, dimensions, output)
+	}
+	// 这两个参数只影响转换，-fix-only 模式不校验它们。
+	if *memory < 64 || *workers < 0 {
+		return fmt.Errorf("转换内存预算至少 64 MiB，workers 不能为负数")
 	}
 	if err = prepareOutput(*targetPath); err != nil {
 		return err
